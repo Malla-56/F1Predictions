@@ -17,6 +17,7 @@ const ADMIN_NAV = [
   { path: '/admin/races',   label: 'Races',     icon: 'races'   },
   { path: '/admin/results', label: 'Results',   icon: 'results' },
   { path: '/admin/import',  label: 'Import',    icon: 'import'  },
+  { path: '/admin/data',    label: 'Data',      icon: 'data'    },
 ];
 
 export default function Sidebar() {
@@ -26,6 +27,7 @@ export default function Sidebar() {
 
   const isAdmin = pathname.startsWith('/admin');
   const nav = isAdmin ? ADMIN_NAV : USER_NAV;
+  console.log("🚀 ~ Sidebar ~ nav:", nav)
 
   return (
     <aside className="sidebar">
@@ -37,34 +39,37 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <div className="nav-section">{isAdmin ? 'Admin' : 'League'}</div>
-      {nav.map(it => (
-        <div
-          key={it.path}
-          className={`nav-item${pathname === it.path || (it.path !== '/admin' && pathname.startsWith(it.path)) ? ' active' : ''}`}
-          onClick={() => navigate(it.path)}
-        >
-          <span className="icon"><Icon name={it.icon} /></span>
-          <span>{it.label}</span>
-          {it.badge && <span className="badge">{it.badge}</span>}
-        </div>
-      ))}
+      {/* Scrollable nav area — footer stays pinned below */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div className="nav-section">{isAdmin ? 'Admin' : 'League'}</div>
+        {nav.map(it => (
+          <div
+            key={it.path}
+            className={`nav-item${pathname === it.path || (it.path !== '/admin' && pathname.startsWith(it.path)) ? ' active' : ''}`}
+            onClick={() => navigate(it.path)}
+          >
+            <span className="icon"><Icon name={it.icon} /></span>
+            <span>{it.label}</span>
+            {it.badge && <span className="badge">{it.badge}</span>}
+          </div>
+        ))}
 
-      <div className="nav-section">Account</div>
-      {isAdmin ? (
-        <div className="nav-item" onClick={() => navigate('/home')}>
-          <span className="icon"><Icon name="home" /></span>
-          <span>Back to League</span>
+        <div className="nav-section">Account</div>
+        {isAdmin ? (
+          <div className="nav-item" onClick={() => navigate('/home')}>
+            <span className="icon"><Icon name="home" /></span>
+            <span>Back to League</span>
+          </div>
+        ) : user?.role === 'admin' && (
+          <div className="nav-item" onClick={() => navigate('/admin')}>
+            <span className="icon"><Icon name="admin" /></span>
+            <span>Admin Panel</span>
+          </div>
+        )}
+        <div className="nav-item" onClick={logout}>
+          <span className="icon"><Icon name="logout" /></span>
+          <span>Sign out</span>
         </div>
-      ) : user?.role === 'admin' && (
-        <div className="nav-item" onClick={() => navigate('/admin')}>
-          <span className="icon"><Icon name="admin" /></span>
-          <span>Admin Panel</span>
-        </div>
-      )}
-      <div className="nav-item" onClick={logout}>
-        <span className="icon"><Icon name="logout" /></span>
-        <span>Sign out</span>
       </div>
 
       <div className="sidebar-foot">

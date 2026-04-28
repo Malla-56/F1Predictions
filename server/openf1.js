@@ -88,4 +88,59 @@ function invalidate(key) {
   CACHE.delete(key);
 }
 
-module.exports = { getMeetings, getSessions, getLatestSessionKey, getSprintMeetingKeys, getDrivers, getPosition, getRaceResult, invalidate };
+// Build a structured race result for a given round by querying OpenF1.
+// Returns { finishOrder, pole, dnfs, sprintWinner } using 3-letter driver codes.
+async function fetchAndBuildResult(round, season = 2026) {
+  const meetings = await getMeetings(season);
+  const sorted = meetings
+    .filter(m => m.meeting_key && m.circuit_short_name && !m.meeting_name?.toLowerCase().includes('testing'))
+    .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
+
+  if (round < 1 || round > sorted.length) throw new Error(`Round ${round} not found in calendar`);
+  const meeting = sorted[round - 1];
+
+  const sessions = await getSessions(meeting.meeting_key);
+
+  const raceSession  = sessions.find(s => s.session_type === 'Race'       && !s.is_cancelled);
+  const qualiSession = sessions.find(s => s.session_type === 'Qualifying'  && !s.is_cancelled);
+  const sprintSession = sessions.find(s => s.session_type === 'Sprint'     && !s.is_cancelled);
+
+  if (!raceSession) throw new Error(`No race session found for round ${round}`);
+
+  const drivers = await getDrivers(raceSession.session_key);
+  const numToCode = {};
+  for (const d of drivers) numToCode[d.driver_number] = d.name_acronym;
+
+  const raceResult = await getRaceResult(raceSession.session_key);
+  if (!raceResult || raceResult.length === 0)
+    throw new Error(`Race result not available yet for round ${round} — try again after the race`);
+
+  const finishOrder = raceResult.map(p => numToCode[p.driver_number]).filter(Boolean);
+
+  // Drivers in the session roster but absent from the final classification are DNFs
+  const classifiedNums = new Set(raceResult.map(p => p.driver_number));
+  const dnfs = drivers
+    .filter(d => !classifiedNums.has(d.driver_number))
+    .map(d => d.name_acronym)
+    .filter(Boolean);
+
+  // Pole from qualifying P1
+  let pole = null;
+  if (qualiSession) {
+    const qualiResult = await getRaceResult(qualiSession.session_key);
+    if (qualiResult && qualiResult.length > 0)
+      pole = numToCode[qualiResult[0].driver_number] || null;
+  }
+
+  // Sprint winner from sprint session P1
+  let sprintWinner = null;
+  if (sprintSession) {
+    const sprintResult = await getRaceResult(sprintSession.session_key);
+    if (sprintResult && sprintResult.length > 0)
+      sprintWinner = numToCode[sprintResult[0].driver_number] || null;
+  }
+
+  return { finishOrder, pole, dnfs, sprintWinner };
+}
+
+module.exports = { getMeetings, getSessions, getLatestSessionKey, getSprintMeetingKeys, getDrivers, getPosition, getRaceResult, fetchAndBuildResult, invalidate };

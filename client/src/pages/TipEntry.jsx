@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAppData } from '../context/AppDataContext';
@@ -166,12 +166,12 @@ export default function TipEntry({ setToast }) {
 
             <div className="entry-card" style={{ background: 'var(--surface-2)', borderStyle: 'dashed' }}>
               <h3>Scoring Guide</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px' }} className="mono">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px 14px' }} className="mono">
                 {scoringRules.map(r => (
-                  <span key={r.rule_key} style={{ display: 'contents' }}>
+                  <Fragment key={r.rule_key}>
                     <span style={{ color: 'var(--text-3)', fontSize: 11 }}>{r.description.split('·')[0]}</span>
-                    <span style={{ fontSize: 11 }}>+{r.points} pts</span>
-                  </span>
+                    <span style={{ fontSize: 11, textAlign: 'right' }}>+{r.points} pts</span>
+                  </Fragment>
                 ))}
               </div>
             </div>

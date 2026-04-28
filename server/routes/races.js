@@ -41,7 +41,8 @@ router.get('/', requireAuth, async (req, res) => {
           date: m.date_start,
           lockTime: lockTime.toISOString(),
           isLocked,
-          isSprint: sprintKeys.has(m.meeting_key),
+          isSprint: sprintKeys.has(m.meeting_key) || cfg.is_sprint === 1,
+          isCancelled: cfg.cancelled === 1,
           status,
         };
       });

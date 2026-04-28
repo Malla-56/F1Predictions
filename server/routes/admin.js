@@ -68,17 +68,18 @@ router.get('/races', (req, res) => {
 
 router.put('/races/:round', (req, res) => {
   const round = parseInt(req.params.round);
-  const { lock_time, manually_locked, is_sprint, notes } = req.body;
+  const { lock_time, manually_locked, is_sprint, cancelled, notes } = req.body;
 
   db.prepare(`
-    INSERT INTO race_config (race_round, season, lock_time, manually_locked, is_sprint, notes)
-    VALUES (?, 2026, ?, ?, ?, ?)
+    INSERT INTO race_config (race_round, season, lock_time, manually_locked, is_sprint, cancelled, notes)
+    VALUES (?, 2026, ?, ?, ?, ?, ?)
     ON CONFLICT(race_round, season) DO UPDATE SET
       lock_time       = COALESCE(excluded.lock_time, lock_time),
       manually_locked = COALESCE(excluded.manually_locked, manually_locked),
       is_sprint       = COALESCE(excluded.is_sprint, is_sprint),
+      cancelled       = COALESCE(excluded.cancelled, cancelled),
       notes           = COALESCE(excluded.notes, notes)
-  `).run(round, lock_time ?? null, manually_locked ?? null, is_sprint ?? null, notes ?? null);
+  `).run(round, lock_time ?? null, manually_locked ?? 0, is_sprint ?? null, cancelled ?? null, notes ?? null);
 
   res.json({ ok: true });
 });
@@ -108,6 +109,30 @@ router.put('/results/:round', (req, res) => {
 
   scoreRound(round, 2026, result);
   res.json({ ok: true });
+});
+
+// Fetch all pending results from OpenF1 (manual trigger for the scheduler)
+router.post('/results/fetch-all', async (req, res) => {
+  const { fetchPendingResults } = require('../scheduler');
+  try {
+    const fetched = await fetchPendingResults();
+    res.json({ ok: true, fetched });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fetch a single round's result from OpenF1, save, and score
+router.post('/results/:round/fetch', async (req, res) => {
+  const round = parseInt(req.params.round);
+  const { saveAndScore } = require('../scheduler');
+  try {
+    const result = await openf1.fetchAndBuildResult(round, 2026);
+    saveAndScore(round, result);
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.post('/results/:round/rescore', (req, res) => {
@@ -183,6 +208,67 @@ router.post('/import', (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ── Export (all predictions + scores for data manager) ─────────────────────
+
+router.get('/export', (req, res) => {
+  const rows = db.prepare(`
+    SELECT
+      u.id as user_id, u.username, u.display_name,
+      p.race_round as round, p.season,
+      p.pole, p.pos_1, p.pos_2, p.pos_3, p.pos_4, p.pos_5,
+      p.pos_6, p.pos_7, p.pos_8, p.pos_9, p.pos_10,
+      p.dnf, p.sprint_winner,
+      s.points_total
+    FROM predictions p
+    JOIN users u ON u.id = p.user_id
+    LEFT JOIN race_scores s
+      ON s.user_id = p.user_id AND s.race_round = p.race_round AND s.season = p.season
+    WHERE p.season = 2026
+    ORDER BY p.race_round, u.username
+  `).all();
+  res.json(rows);
+});
+
+// ── Score Override (mode=points CSV rows) ──────────────────────────────────
+
+router.post('/scores/override', (req, res) => {
+  const records = req.body;
+  if (!Array.isArray(records) || records.length === 0)
+    return res.status(400).json({ error: 'Body must be a non-empty JSON array' });
+
+  const upsertScore = db.prepare(`
+    INSERT INTO race_scores (user_id, race_round, season, points_total, breakdown, scored_at)
+    VALUES (?, ?, ?, ?, '{"override":true}', CURRENT_TIMESTAMP)
+    ON CONFLICT(user_id, race_round, season) DO UPDATE SET
+      points_total = excluded.points_total,
+      breakdown    = excluded.breakdown,
+      scored_at    = excluded.scored_at
+  `);
+
+  const summary = [];
+  const batch = db.transaction(() => {
+    for (const rec of records) {
+      const round  = parseInt(rec.round);
+      const season = parseInt(rec.season || 2026);
+      const points = parseInt(rec.points);
+      if (!round || isNaN(round)) throw new Error(`Invalid round: ${rec.round}`);
+      if (isNaN(points)) throw new Error(`Round ${round}: invalid points for "${rec.username}"`);
+
+      let entry = summary.find(s => s.round === round && s.season === season);
+      if (!entry) { entry = { round, season, written: 0, skipped: [] }; summary.push(entry); }
+
+      const user = db.prepare('SELECT id FROM users WHERE username = ?').get((rec.username || '').toLowerCase());
+      if (!user) { entry.skipped.push(rec.username || '?'); continue; }
+
+      upsertScore.run(user.id, round, season, points);
+      entry.written++;
+    }
+  });
+
+  try { batch(); res.json({ ok: true, summary }); }
+  catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 // ── Stats overview ─────────────────────────────────────────────────────────

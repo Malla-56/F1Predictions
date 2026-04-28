@@ -14,6 +14,7 @@ const PATHS = {
   moon:     'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
   chev:     'M6 9l6 6 6-6',
   import:   'M12 3v12 M8 11l4 4 4-4 M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',
+  data:     'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
 };
 
 export default function Icon({ name, size = 16 }) {

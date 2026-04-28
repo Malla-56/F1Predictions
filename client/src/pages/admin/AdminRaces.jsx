@@ -41,6 +41,14 @@ export default function AdminRaces({ setToast }) {
     setToast(`R${race.round} sprint status updated`);
   }
 
+  async function toggleCancelled(race) {
+    const current = configs[race.round];
+    const newVal = current?.cancelled ? 0 : 1;
+    await api.admin.saveRace(race.round, { cancelled: newVal });
+    setConfigs(prev => ({ ...prev, [race.round]: { ...prev[race.round], cancelled: newVal } }));
+    setToast(`R${race.round} ${newVal ? 'marked cancelled' : 'restored'}`);
+  }
+
   return (
     <>
       <Topbar crumbs={['Admin', 'Races']} />
@@ -61,6 +69,7 @@ export default function AdminRaces({ setToast }) {
                 <th>Date</th>
                 <th>Lock Time Override</th>
                 <th>Sprint</th>
+                <th>Cancelled</th>
                 <th>Status</th>
                 <th>Lock</th>
               </tr>
@@ -69,11 +78,13 @@ export default function AdminRaces({ setToast }) {
               {races.map(r => {
                 const cfg = configs[r.round] || {};
                 const isManuallyLocked = cfg.manually_locked === 1;
+                const isCancelled = cfg.cancelled === 1;
                 return (
-                  <tr key={r.round}>
+                  <tr key={r.round} style={isCancelled ? { opacity: 0.5 } : {}}>
                     <td className="mono" style={{ color: 'var(--text-3)', fontSize: 12 }}>R{String(r.round).padStart(2, '0')}</td>
-                    <td style={{ fontFamily: 'var(--display)', fontWeight: 600 }}>
+                    <td style={{ fontFamily: 'var(--display)', fontWeight: 600, textDecoration: isCancelled ? 'line-through' : 'none' }}>
                       {countryFlag(r.countryCode)} {r.name}
+                      {isCancelled && <span className="badge" style={{ marginLeft: 8, fontSize: 9, background: 'var(--text-3)', color: 'var(--bg)' }}>CANCELLED</span>}
                     </td>
                     <td className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>
                       {new Date(r.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}

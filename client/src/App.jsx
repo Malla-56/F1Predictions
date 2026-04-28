@@ -17,6 +17,7 @@ import AdminScoring from './pages/admin/AdminScoring';
 import AdminRaces from './pages/admin/AdminRaces';
 import AdminResults from './pages/admin/AdminResults';
 import AdminImport from './pages/admin/AdminImport';
+import AdminData from './pages/admin/AdminData';
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth();
@@ -77,6 +78,7 @@ function AppShell() {
             <Route path="/admin/races" element={<RequireAdmin><AdminRaces setToast={setToast} /></RequireAdmin>} />
             <Route path="/admin/results" element={<RequireAdmin><AdminResults setToast={setToast} /></RequireAdmin>} />
             <Route path="/admin/import" element={<RequireAdmin><AdminImport setToast={setToast} /></RequireAdmin>} />
+            <Route path="/admin/data"   element={<RequireAdmin><AdminData   setToast={setToast} /></RequireAdmin>} />
 
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Routes>

@@ -1,4 +1,5 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+require('./scheduler');
 
 const express = require('express');
 const path = require('path');

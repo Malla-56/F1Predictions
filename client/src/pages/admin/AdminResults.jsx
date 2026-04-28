@@ -14,6 +14,8 @@ export default function AdminResults({ setToast }) {
   const [sprintWinner, setSprintWinner] = useState(null);
   const [storedResults, setStoredResults] = useState({});
   const [saving, setSaving] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [fetchingAll, setFetchingAll] = useState(false);
 
   useEffect(() => {
     api.admin.results().then(rows => {
@@ -65,6 +67,35 @@ export default function AdminResults({ setToast }) {
     setToast(`R${selectedRound} rescored`);
   }
 
+  async function fetchFromOpenF1() {
+    setFetching(true);
+    try {
+      const res = await api.admin.fetchResult(selectedRound);
+      setToast(`R${selectedRound} fetched from OpenF1 and scored ✓`);
+      // Reload stored results and pre-fill the form
+      const rows = await api.admin.results();
+      setStoredResults(Object.fromEntries(rows.map(r => [r.race_round, r.result])));
+    } catch (err) {
+      setToast(`Fetch failed: ${err.message}`);
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  async function fetchAll() {
+    setFetchingAll(true);
+    try {
+      const res = await api.admin.fetchAllResults();
+      setToast(res.fetched > 0 ? `Fetched ${res.fetched} round(s) from OpenF1 ✓` : 'No new results available yet');
+      const rows = await api.admin.results();
+      setStoredResults(Object.fromEntries(rows.map(r => [r.race_round, r.result])));
+    } catch (err) {
+      setToast(`Fetch all failed: ${err.message}`);
+    } finally {
+      setFetchingAll(false);
+    }
+  }
+
   const race = races.find(r => r.round === selectedRound);
 
   return (
@@ -76,6 +107,9 @@ export default function AdminResults({ setToast }) {
             <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Race Results</h2>
             <div className="muted" style={{ marginTop: 6 }}>Enter or correct official results — triggers automatic scoring</div>
           </div>
+          <button className="btn" onClick={fetchAll} disabled={fetchingAll}>
+            {fetchingAll ? 'Fetching…' : '⟳ Fetch all from OpenF1'}
+          </button>
         </div>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
@@ -133,8 +167,9 @@ export default function AdminResults({ setToast }) {
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button className="btn primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save & Score →'}</button>
+                <button className="btn" onClick={fetchFromOpenF1} disabled={fetching}>{fetching ? 'Fetching…' : '⟳ Fetch from OpenF1'}</button>
                 {storedResults[selectedRound] && (
                   <button className="btn ghost" onClick={rescore}>Rescore</button>
                 )}

@@ -64,7 +64,11 @@ export const api = {
     saveRace:    (round, data)    => request('PUT',  `/admin/races/${round}`, data),
     results:     ()               => request('GET',  '/admin/results'),
     saveResult:  (round, data)    => request('PUT',  `/admin/results/${round}`, data),
-    rescore:     (round)          => request('POST', `/admin/results/${round}/rescore`),
-    import:      (data)           => request('POST', '/admin/import', data),
+    rescore:       (round)  => request('POST', `/admin/results/${round}/rescore`),
+    fetchResult:   (round)  => request('POST', `/admin/results/${round}/fetch`),
+    fetchAllResults: ()     => request('POST', '/admin/results/fetch-all'),
+    import:         (data)  => request('POST', '/admin/import', data),
+    overrideScores: (data)  => request('POST', '/admin/scores/override', data),
+    exportData:     ()      => request('GET',  '/admin/export'),
   },
 };

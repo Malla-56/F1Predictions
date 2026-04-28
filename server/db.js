@@ -63,6 +63,13 @@ db.exec(`
   );
 `);
 
+// Migrate: add cancelled column to race_config if missing
+const raceCols = db.prepare('PRAGMA table_info(race_config)').all().map(c => c.name);
+if (!raceCols.includes('cancelled')) {
+  db.exec('ALTER TABLE race_config ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0');
+  console.log('DB migration: race_config.cancelled added');
+}
+
 // Migrate: rename email → username if the old schema is still in place
 const userCols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
 if (userCols.includes('email') && !userCols.includes('username')) {
