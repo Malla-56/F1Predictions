@@ -51,6 +51,7 @@ export const api = {
 
   scores: {
     leaderboard: () => request('GET', '/scores'),
+    round: (round) => request('GET', `/scores/round/${round}`),
   },
 
   admin: {

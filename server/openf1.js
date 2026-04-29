@@ -89,7 +89,7 @@ function invalidate(key) {
 }
 
 // Build a structured race result for a given round by querying OpenF1.
-// Returns { finishOrder, pole, dnfs, sprintWinner } using 3-letter driver codes.
+// Returns { finishOrder, pole, dnfs, sprintPole, sprintFinishOrder, sprintDnfs } using 3-letter driver codes.
 async function fetchAndBuildResult(round, season = 2026) {
   const meetings = await getMeetings(season);
   const sorted = meetings
@@ -101,7 +101,9 @@ async function fetchAndBuildResult(round, season = 2026) {
 
   const sessions = await getSessions(meeting.meeting_key);
 
-  const raceSession  = sessions.find(s => s.session_type === 'Race'       && !s.is_cancelled);
+  // Get the last Race session (actual race, not sprint race)
+  const raceSessions = sessions.filter(s => s.session_type === 'Race' && !s.is_cancelled);
+  const raceSession = raceSessions.length > 0 ? raceSessions[raceSessions.length - 1] : null;
   const qualiSession = sessions.find(s => s.session_type === 'Qualifying'  && !s.is_cancelled);
   const sprintSession = sessions.find(s => s.session_type === 'Sprint'     && !s.is_cancelled);
 
@@ -132,15 +134,24 @@ async function fetchAndBuildResult(round, season = 2026) {
       pole = numToCode[qualiResult[0].driver_number] || null;
   }
 
-  // Sprint winner from sprint session P1
-  let sprintWinner = null;
+  // Sprint results (if sprint race exists)
+  let sprintPole = null;
+  let sprintFinishOrder = [];
+  let sprintDnfs = [];
   if (sprintSession) {
     const sprintResult = await getRaceResult(sprintSession.session_key);
-    if (sprintResult && sprintResult.length > 0)
-      sprintWinner = numToCode[sprintResult[0].driver_number] || null;
+    if (sprintResult && sprintResult.length > 0) {
+      sprintFinishOrder = sprintResult.map(p => numToCode[p.driver_number]).filter(Boolean);
+      sprintPole = sprintFinishOrder[0] || null;
+      const sprintClassifiedNums = new Set(sprintResult.map(p => p.driver_number));
+      sprintDnfs = drivers
+        .filter(d => !sprintClassifiedNums.has(d.driver_number))
+        .map(d => d.name_acronym)
+        .filter(Boolean);
+    }
   }
 
-  return { finishOrder, pole, dnfs, sprintWinner };
+  return { finishOrder, pole, dnfs, sprintPole, sprintFinishOrder, sprintDnfs };
 }
 
 module.exports = { getMeetings, getSessions, getLatestSessionKey, getSprintMeetingKeys, getDrivers, getPosition, getRaceResult, fetchAndBuildResult, invalidate };

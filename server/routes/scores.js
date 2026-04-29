@@ -4,6 +4,31 @@ const requireAuth = require('../middleware/auth');
 
 const router = express.Router();
 
+// Scores for a specific round — returns per-user points + breakdown
+router.get('/round/:round', requireAuth, async (req, res) => {
+  const round = parseInt(req.params.round);
+  const season = parseInt(req.query.season || 2026);
+
+  const { rows } = await pool.query(
+    'SELECT rs.*, u.display_name FROM race_scores rs JOIN users u ON rs.user_id = u.id WHERE rs.race_round = $1 AND rs.season = $2',
+    [round, season]
+  );
+
+  const avg = rows.length > 0
+    ? Math.round(rows.reduce((sum, r) => sum + r.points_total, 0) / rows.length)
+    : 0;
+
+  res.json({
+    leagueAverage: avg,
+    scores: rows.map(r => ({
+      userId: r.user_id,
+      displayName: r.display_name,
+      points: r.points_total,
+      breakdown: JSON.parse(r.breakdown),
+    })),
+  });
+});
+
 router.get('/', requireAuth, async (req, res) => {
   const season = parseInt(req.query.season || 2026);
 

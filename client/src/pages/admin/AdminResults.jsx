@@ -11,7 +11,9 @@ export default function AdminResults({ setToast }) {
   const [finishOrder, setFinishOrder] = useState(Array(10).fill(null));
   const [pole, setPole] = useState(null);
   const [dnfs, setDnfs] = useState([null]);
-  const [sprintWinner, setSprintWinner] = useState(null);
+  const [sprintPole, setSprintPole] = useState(null);
+  const [sprintFinishOrder, setSprintFinishOrder] = useState(Array(10).fill(null));
+  const [sprintDnfs, setSprintDnfs] = useState([null]);
   const [storedResults, setStoredResults] = useState({});
   const [saving, setSaving] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -30,12 +32,16 @@ export default function AdminResults({ setToast }) {
       setFinishOrder(stored.finishOrder || Array(10).fill(null));
       setPole(stored.pole || null);
       setDnfs(stored.dnfs?.length ? stored.dnfs.map(d => d) : [null]);
-      setSprintWinner(stored.sprintWinner || null);
+      setSprintPole(stored.sprintPole || null);
+      setSprintFinishOrder(stored.sprintFinishOrder || Array(10).fill(null));
+      setSprintDnfs(stored.sprintDnfs?.length ? stored.sprintDnfs.map(d => d) : [null]);
     } else {
       setFinishOrder(Array(10).fill(null));
       setPole(null);
       setDnfs([null]);
-      setSprintWinner(null);
+      setSprintPole(null);
+      setSprintFinishOrder(Array(10).fill(null));
+      setSprintDnfs([null]);
     }
   }, [selectedRound, storedResults]);
 
@@ -49,10 +55,27 @@ export default function AdminResults({ setToast }) {
     });
   }
 
+  function setSprintPosition(i, driverId) {
+    setSprintFinishOrder(arr => {
+      const next = [...arr];
+      const existing = arr.indexOf(driverId);
+      if (existing > -1) next[existing] = arr[i];
+      next[i] = driverId;
+      return next;
+    });
+  }
+
   async function save() {
     setSaving(true);
     try {
-      await api.admin.saveResult(selectedRound, { finishOrder, pole, dnfs: dnfs.filter(Boolean), sprintWinner });
+      await api.admin.saveResult(selectedRound, {
+        finishOrder,
+        pole,
+        dnfs: dnfs.filter(Boolean),
+        sprintPole,
+        sprintFinishOrder,
+        sprintDnfs: sprintDnfs.filter(Boolean)
+      });
       setToast(`R${selectedRound} results saved and scored`);
       api.admin.results().then(rows => setStoredResults(Object.fromEntries(rows.map(r => [r.race_round, r.result])))).catch(() => {});
     } catch (err) {
@@ -130,7 +153,7 @@ export default function AdminResults({ setToast }) {
         )}
 
         {selectedRound && (
-          <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 18, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: race?.isSprint ? '380px 1fr 1fr' : '380px 1fr', gap: 18, alignItems: 'start' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div className="entry-card">
                 <h3>Pole Position</h3>
@@ -161,10 +184,39 @@ export default function AdminResults({ setToast }) {
               </div>
 
               {race?.isSprint && (
-                <div className="entry-card">
-                  <h3>Sprint Winner</h3>
-                  <DriverDropdown value={sprintWinner} onChange={setSprintWinner} placeholder="Sprint winner" />
-                </div>
+                <>
+                  <div style={{ borderTop: '1px solid var(--line)', paddingTop: 18, marginTop: 12 }}>
+                    <h3 style={{ marginBottom: 16, fontSize: 14, color: 'var(--text-2)' }}>SPRINT RACE</h3>
+                  </div>
+
+                  <div className="entry-card">
+                    <h3>Sprint Pole Position</h3>
+                    <DriverDropdown value={sprintPole} onChange={setSprintPole} placeholder="Sprint pole sitter" />
+                  </div>
+
+                  <div className="entry-card">
+                    <h3>Sprint DNF Drivers</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {sprintDnfs.map((d, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <DriverDropdown
+                            value={d}
+                            onChange={val => setSprintDnfs(prev => prev.map((x, j) => j === i ? val : x))}
+                            exclude={sprintDnfs.filter((_, j) => j !== i)}
+                            placeholder="Sprint DNF driver"
+                          />
+                          {i > 0 && (
+                            <button className="btn ghost" style={{ height: 44, padding: '0 10px' }}
+                                    onClick={() => setSprintDnfs(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                          )}
+                        </div>
+                      ))}
+                      <button className="btn ghost" style={{ height: 34 }} onClick={() => setSprintDnfs(prev => [...prev, null])}>
+                        + Add Sprint DNF
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -177,7 +229,7 @@ export default function AdminResults({ setToast }) {
             </div>
 
             <div className="entry-card">
-              <h3>Finishing Order · P1 → P10</h3>
+              <h3>Race Finishing Order · P1 → P10</h3>
               <div className="draglist">
                 {finishOrder.map((id, i) => (
                   <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -190,6 +242,23 @@ export default function AdminResults({ setToast }) {
                 ))}
               </div>
             </div>
+
+            {race?.isSprint && (
+              <div className="entry-card">
+                <h3>Sprint Finishing Order · P1 → P10</h3>
+                <div className="draglist">
+                  {sprintFinishOrder.map((id, i) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 3 }}>
+                        <div className={`pos-pill${i === 0 ? ' gold' : i < 3 ? ' silver' : ''}`}>P{i + 1}</div>
+                        {id ? <DriverChip driverId={id} showName /> : <span className="muted">empty</span>}
+                      </div>
+                      <DriverDropdown value={id} onChange={d => setSprintPosition(i, d)} exclude={sprintFinishOrder} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

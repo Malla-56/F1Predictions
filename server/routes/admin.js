@@ -105,8 +105,15 @@ router.get('/results', async (req, res) => {
 
 router.put('/results/:round', async (req, res) => {
   const round = parseInt(req.params.round);
-  const { finishOrder, pole, dnfs, sprintWinner } = req.body;
-  const result = { finishOrder, pole, dnfs: dnfs || [], sprintWinner: sprintWinner || null };
+  const { finishOrder, pole, dnfs, sprintPole, sprintFinishOrder, sprintDnfs } = req.body;
+  const result = {
+    finishOrder,
+    pole,
+    dnfs: dnfs || [],
+    sprintPole: sprintPole || null,
+    sprintFinishOrder: sprintFinishOrder || [],
+    sprintDnfs: sprintDnfs || []
+  };
 
   await pool.query(`
     INSERT INTO race_results (race_round, season, result_json, source, updated_at)

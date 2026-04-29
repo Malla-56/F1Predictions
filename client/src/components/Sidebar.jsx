@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 const USER_NAV = [
   { path: '/home',        label: 'Home',        icon: 'home',  badge: null },
   { path: '/tips',        label: 'My Tips',     icon: 'tips',  badge: null },
+  { path: '/results',     label: 'Results',     icon: 'flag',  badge: null },
   { path: '/scoreboard',  label: 'Scoreboard',  icon: 'score', badge: null },
   { path: '/stats',       label: 'Stats',       icon: 'stats', badge: null },
 ];

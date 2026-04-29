@@ -11,6 +11,7 @@ import MyTips from './pages/MyTips';
 import TipEntry from './pages/TipEntry';
 import Scoreboard from './pages/Scoreboard';
 import Stats from './pages/Stats';
+import Results from './pages/Results';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminScoring from './pages/admin/AdminScoring';
@@ -69,6 +70,7 @@ function AppShell() {
             <Route path="/home" element={<Home setToast={setToast} theme={theme} setTheme={setTheme} />} />
             <Route path="/tips" element={<MyTips />} />
             <Route path="/predict/:round" element={<TipEntry setToast={setToast} />} />
+            <Route path="/results" element={<Results setToast={setToast} />} />
             <Route path="/scoreboard" element={<Scoreboard />} />
             <Route path="/stats" element={<Stats />} />
 
