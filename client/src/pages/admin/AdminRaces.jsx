@@ -70,8 +70,7 @@ export default function AdminRaces({ setToast }) {
                 <th>Lock Time Override</th>
                 <th>Sprint</th>
                 <th>Cancelled</th>
-                <th>Status</th>
-                <th>Lock</th>
+                <th>Manual Lock</th>
               </tr>
             </thead>
             <tbody>
@@ -108,9 +107,10 @@ export default function AdminRaces({ setToast }) {
                       </label>
                     </td>
                     <td>
-                      <span className={`badge dot ${r.isLocked ? 'locked' : r.status === 'done' ? 'done' : 'pending'}`}>
-                        {r.status}
-                      </span>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={cfg.cancelled === 1} onChange={() => toggleCancelled(r)} style={{ accentColor: 'var(--red)' }} />
+                        <span className="mono" style={{ fontSize: 11 }}>Cancelled</span>
+                      </label>
                     </td>
                     <td>
                       <button

@@ -16,8 +16,10 @@ export default function Home({ setToast, theme, setTheme }) {
 
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [selectedTip, setSelectedTip] = useState(null);
 
-  const upcoming = races.find(r => r.status === 'upcoming') || races.find(r => r.status === 'future');
+  const upcoming = races.find(r => r.status === 'upcoming' && !r.isCancelled) || races.find(r => r.status === 'future' && !r.isCancelled);
+  const cancelledRaces = races.filter(r => r.isCancelled);
 
   useEffect(() => {
     if (!upcoming) return;
@@ -83,9 +85,25 @@ export default function Home({ setToast, theme, setTheme }) {
           </div>
         </div>
 
+        {cancelledRaces.length > 0 && (
+          <div className="sec-head" style={{ marginTop: 32, marginBottom: 12 }}>
+            <h2>Cancelled Races</h2>
+          </div>
+        )}
+        {cancelledRaces.map(r => (
+          <div key={r.round} className="card" style={{ padding: '14px 18px', marginBottom: 12, borderColor: 'rgba(225,6,0,0.4)', background: 'var(--red-dim)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)', letterSpacing: '0.08em' }}>
+                ✗ R{String(r.round).padStart(2, '0')} · {r.name}
+              </span>
+              <span className="badge" style={{ background: 'rgba(225,6,0,0.5)', color: 'var(--red)' }}>CANCELLED</span>
+            </div>
+          </div>
+        ))}
+
         <div className="sec-head">
           <h2>Community Tips</h2>
-          <div className="meta">{predictions.filter(p => p.locked).length} / {predictions.length} Locked In</div>
+          <div className="meta">{predictions.filter(p => p.locked).length} / {predictions.length} Submitted</div>
         </div>
 
         {loading ? (
@@ -93,7 +111,7 @@ export default function Home({ setToast, theme, setTheme }) {
         ) : (
           <div className="tipgrid">
             {predictions.map(p => (
-              <TipCard key={p.userId} prediction={p} isMe={p.userId === user?.id} raceName={upcoming.name} />
+              <TipCard key={p.userId} prediction={p} isMe={p.userId === user?.id} raceName={upcoming.name} raceIsLocked={upcoming?.isLocked} onViewFull={() => setSelectedTip(p)} navigate={navigate} />
             ))}
             {predictions.length === 0 && (
               <div className="mono" style={{ color: 'var(--text-3)', fontSize: 11, padding: '32px 0' }}>
@@ -102,14 +120,59 @@ export default function Home({ setToast, theme, setTheme }) {
             )}
           </div>
         )}
+
+        {selectedTip && (
+          <div className="modal-bg" onClick={() => setSelectedTip(null)}>
+            <div className="modal" style={{ maxWidth: 520, padding: '28px' }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Avatar displayName={selectedTip.displayName} size={40} isMe={selectedTip.userId === user?.id} />
+                  <div>
+                    <div style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 15 }}>{selectedTip.displayName}</div>
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>FULL TIP · {upcoming?.name?.toUpperCase()}</div>
+                  </div>
+                </div>
+                <span className="badge locked dot">Submitted</span>
+              </div>
+              <div style={{ marginBottom: 28 }}>
+                <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 16 }}>RACE FINISH</div>
+                <div className="reveal-grid" style={{ gap: 12 }}>
+                  {(selectedTip.positions || []).map((id, i) => (
+                    <div key={i} className="reveal-row" style={{ padding: '12px 0', borderBottom: i < 9 ? '1px solid var(--line)' : 'none', gap: 20 }}>
+                      <span className="pos">P{i + 1}</span>
+                      <DriverChip driverId={id} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
+                <div>
+                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 12 }}>POLE POSITION</div>
+                  <DriverChip driverId={selectedTip.pole} showName />
+                </div>
+                <div>
+                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 12 }}>DID NOT FINISH</div>
+                  <DriverChip driverId={selectedTip.dnf} showName />
+                </div>
+              </div>
+              {selectedTip.userId === user?.id && !upcoming?.isLocked && (
+                <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
+                  <button className="btn primary" style={{ width: '100%' }} onClick={() => { setSelectedTip(null); navigate(`/predict/${upcoming.round}`); }}>
+                    Edit tips →
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
 }
 
-function TipCard({ prediction: p, isMe, raceName }) {
+function TipCard({ prediction: p, isMe, raceName, raceIsLocked, onViewFull, navigate }) {
   return (
-    <div className={`tipcard${isMe ? ' me' : ''}`}>
+    <div className={`tipcard${isMe ? ' me' : ''}`} style={{ cursor: p.locked ? 'pointer' : 'default' }} onClick={() => p.locked && onViewFull()}>
       <div className="tipcard-hd">
         <Avatar displayName={p.displayName} size={36} isMe={isMe} />
         <div className="tipcard-name">
@@ -118,7 +181,7 @@ function TipCard({ prediction: p, isMe, raceName }) {
         </div>
         <div className="tipcard-status">
           <span className={`badge dot ${p.locked ? 'locked' : 'pending'}`}>
-            {p.locked ? 'Locked' : 'Pending'}
+            {p.locked ? 'Submitted' : 'Pending'}
           </span>
         </div>
       </div>
@@ -143,42 +206,9 @@ function TipCard({ prediction: p, isMe, raceName }) {
       </div>
 
       <div className="tipcard-foot">
-        <span>{p.locked ? 'Submitted' : 'Awaiting lock'}</span>
-        {p.locked && <span>↗ Hover for full picks</span>}
+        <span>{p.locked ? 'Submitted' : 'Awaiting submission'}</span>
+        {p.locked && <span>↗ Click for full picks</span>}
       </div>
-
-      {p.locked && (
-        <div className="reveal">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Avatar displayName={p.displayName} size={28} isMe={isMe} />
-              <div>
-                <div style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 13 }}>{p.displayName}</div>
-                <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>FULL TIP · {raceName?.toUpperCase()}</div>
-              </div>
-            </div>
-            <span className="badge locked dot">Locked</span>
-          </div>
-          <div className="reveal-grid">
-            {(p.positions || []).map((id, i) => (
-              <div key={i} className="reveal-row">
-                <span className="pos">P{i + 1}</span>
-                <DriverChip driverId={id} />
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 'auto', paddingTop: 10, borderTop: '1px solid var(--line)' }}>
-            <div>
-              <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.14em' }}>POLE</div>
-              <div style={{ marginTop: 4 }}><DriverChip driverId={p.pole} /></div>
-            </div>
-            <div>
-              <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.14em' }}>DNF</div>
-              <div style={{ marginTop: 4 }}><DriverChip driverId={p.dnf} /></div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -91,7 +91,7 @@ router.put('/races/:round', async (req, res) => {
       is_sprint       = COALESCE(EXCLUDED.is_sprint, race_config.is_sprint),
       cancelled       = COALESCE(EXCLUDED.cancelled, race_config.cancelled),
       notes           = COALESCE(EXCLUDED.notes, race_config.notes)
-  `, [round, lock_time ?? null, manually_locked ?? 0, is_sprint ?? null, cancelled ?? null, notes ?? null]);
+  `, [round, lock_time ?? null, manually_locked ?? 0, is_sprint ?? 0, cancelled ?? 0, notes ?? null]);
 
   res.json({ ok: true });
 });

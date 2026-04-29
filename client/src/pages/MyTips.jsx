@@ -10,6 +10,7 @@ export default function MyTips() {
   const navigate = useNavigate();
   const [myPreds, setMyPreds] = useState([]);
   const [scores, setScores] = useState({});
+  const [expandedRound, setExpandedRound] = useState(null);
 
   useEffect(() => {
     api.predictions.myAll().then(setMyPreds).catch(() => {});
@@ -21,7 +22,7 @@ export default function MyTips() {
 
   const predMap = Object.fromEntries(myPreds.map(p => [p.round, p]));
 
-  const upcoming = races.find(r => r.status === 'upcoming');
+  const upcoming = races.find(r => r.status === 'upcoming' && !r.isCancelled);
 
   return (
     <>
@@ -54,45 +55,85 @@ export default function MyTips() {
             <span></span>
           </div>
 
-          {races.map(r => {
+          {races.filter(r => !r.isCancelled).map(r => {
             const pred = predMap[r.round];
             const pts = scores[r.round];
             return (
-              <div
-                key={r.round}
-                className="score-row"
-                style={{
-                  gridTemplateColumns: '56px 1fr 130px 130px 130px 120px 32px',
-                  opacity: r.status === 'future' && !pred ? 0.5 : 1,
-                  cursor: r.status !== 'done' ? 'pointer' : 'default',
-                }}
-                onClick={() => r.status !== 'done' && navigate(`/predict/${r.round}`)}
-              >
-                <span className="rank" style={{ fontSize: 15, color: r.status === 'upcoming' ? 'var(--red)' : 'var(--text-2)' }}>
-                  R{String(r.round).padStart(2, '0')}
-                </span>
-                <div className="name" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                  <span>{r.name}</span>
-                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', marginLeft: 0 }}>
-                    {countryFlag(r.countryCode)} {r.circuit?.toUpperCase()}
+              <div key={r.round}>
+                <div
+                  className="score-row"
+                  style={{
+                    gridTemplateColumns: '56px 1fr 130px 130px 130px 120px 32px',
+                    opacity: r.status === 'future' && !pred ? 0.5 : 1,
+                    cursor: pred ? 'pointer' : (r.status !== 'done' ? 'pointer' : 'default'),
+                  }}
+                  onClick={() => {
+                    if (pred && r.status === 'done') {
+                      setExpandedRound(r.round);
+                    } else if (!pred && r.status !== 'done') {
+                      navigate(`/predict/${r.round}`);
+                    } else if (pred) {
+                      setExpandedRound(r.round);
+                    }
+                  }}
+                >
+                  <span className="rank" style={{ fontSize: 15, color: r.status === 'upcoming' ? 'var(--red)' : 'var(--text-2)' }}>
+                    R{String(r.round).padStart(2, '0')}
                   </span>
+                  <div className="name" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                    <span>{r.name}</span>
+                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', marginLeft: 0 }}>
+                      {countryFlag(r.countryCode)} {r.circuit?.toUpperCase()}
+                    </span>
+                  </div>
+                  <DriverChip driverId={pred?.pole} />
+                  <DriverChip driverId={pred?.positions?.[0]} />
+                  <DriverChip driverId={pred?.dnf} />
+                  <span className="num">
+                    {pts !== undefined
+                      ? <span style={{ color: 'var(--green)' }}>{pts.points} pts</span>
+                      : r.status === 'upcoming' || r.status === 'future'
+                        ? <span className="badge pending dot">Pending</span>
+                        : <span style={{ color: 'var(--text-3)' }}>—</span>
+                    }
+                  </span>
+                  <span className="chev" style={{ color: 'var(--text-3)' }}>→</span>
                 </div>
-                <DriverChip driverId={pred?.pole} />
-                <DriverChip driverId={pred?.positions?.[0]} />
-                <DriverChip driverId={pred?.dnf} />
-                <span className="num">
-                  {pts !== undefined
-                    ? <span style={{ color: 'var(--green)' }}>{pts.points} pts</span>
-                    : r.status === 'upcoming' || r.status === 'future'
-                      ? <span className="badge pending dot">Pending</span>
-                      : <span style={{ color: 'var(--text-3)' }}>—</span>
-                  }
-                </span>
-                <span className="chev" style={{ color: 'var(--text-3)' }}>→</span>
               </div>
             );
           })}
         </div>
+
+        {expandedRound && predMap[expandedRound] && (
+          <div className="modal-bg" onClick={() => setExpandedRound(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <div style={{ marginBottom: 16 }}>
+                <h3>Round {String(expandedRound).padStart(2, '0')} — Full Tips</h3>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                  {races.find(r => r.round === expandedRound)?.name}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, maxHeight: '60vh', overflowY: 'auto' }}>
+                {(predMap[expandedRound].positions || []).map((driverId, i) => (
+                  <div key={i} style={{ padding: '10px 0', borderBottom: i < 9 ? '1px solid var(--line)' : 'none' }}>
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 6 }}>POSITION {i + 1}</div>
+                    <DriverChip driverId={driverId} showName />
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
+                <div>
+                  <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 6 }}>POLE POSITION</div>
+                  <DriverChip driverId={predMap[expandedRound].pole} showName />
+                </div>
+                <div>
+                  <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 6 }}>DID NOT FINISH</div>
+                  <DriverChip driverId={predMap[expandedRound].dnf} showName />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

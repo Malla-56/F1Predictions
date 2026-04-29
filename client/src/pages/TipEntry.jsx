@@ -71,14 +71,14 @@ export default function TipEntry({ setToast }) {
     });
   }
 
-  const valid = top10.every(Boolean) && pole && dnf;
+  const valid = top10.every(Boolean) && pole && dnf && (race?.isSprint ? sprintWinner : true);
   const isLocked = race?.isLocked;
 
   async function lockIn() {
     setSaving(true);
     try {
       await api.predictions.save(parseInt(round), { pole, positions: top10, dnf, sprintWinner });
-      setToast(`Tips locked in for ${race?.name}`);
+      setToast(`Tips submitted for ${race?.name}`);
       setShowConfirm(false);
       navigate('/home');
     } catch (err) {
@@ -98,6 +98,43 @@ export default function TipEntry({ setToast }) {
   }
 
   const crumbs = ['Pulse League', 'Tip Entry', race ? `R${String(race.round).padStart(2,'0')} · ${race.name}` : '…'];
+  const isCancelled = race?.isCancelled;
+
+  if (isCancelled) {
+    return (
+      <>
+        <Topbar crumbs={crumbs} />
+        <div className="content">
+          <div className="sec-head" style={{ marginTop: 0 }}>
+            <div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>
+                R{String(parseInt(round)).padStart(2,'0')} · Cancelled
+              </div>
+              <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em', margin: 0 }}>
+                {race?.name || 'Loading…'}{' '}
+                <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>· {race ? countryFlag(race.countryCode) : ''}</span>
+              </h2>
+              <div className="muted" style={{ marginTop: 6 }}>{race?.circuit}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button className="btn ghost" onClick={() => navigate('/home')}>← Back</button>
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: '14px 18px', marginBottom: 18, borderColor: 'rgba(225,6,0,0.4)', background: 'var(--red-dim)' }}>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)', letterSpacing: '0.08em' }}>
+              ✗ THIS RACE HAS BEEN CANCELLED — NO TIPS REQUIRED
+            </span>
+          </div>
+
+          <div className="card" style={{ padding: '28px', textAlign: 'center' }}>
+            <p style={{ margin: '0 0 16px 0', color: 'var(--text-2)' }}>This race will not take place.</p>
+            <button className="btn ghost" onClick={() => navigate('/home')}>Back to home →</button>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -202,7 +239,7 @@ export default function TipEntry({ setToast }) {
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button className="btn ghost" onClick={saveDraft}>Save draft</button>
                   <button className="btn primary" disabled={!valid} onClick={() => setShowConfirm(true)}>
-                    Lock in tips →
+                    Submit tips →
                   </button>
                 </div>
               </div>
@@ -214,7 +251,7 @@ export default function TipEntry({ setToast }) {
       {showConfirm && (
         <div className="modal-bg" onClick={() => setShowConfirm(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>Lock in your tips?</h3>
+            <h3>Submit your tips?</h3>
             <p className="muted">Once locked, picks for {race?.name} can't be changed.</p>
             <div className="modal-summary">
               <div className="item">
@@ -233,7 +270,7 @@ export default function TipEntry({ setToast }) {
             <div className="modal-actions">
               <button className="btn ghost" onClick={() => setShowConfirm(false)}>Cancel</button>
               <button className="btn primary" onClick={lockIn} disabled={saving}>
-                {saving ? 'Saving…' : 'Confirm lock →'}
+                {saving ? 'Saving…' : 'Confirm submit →'}
               </button>
             </div>
           </div>
