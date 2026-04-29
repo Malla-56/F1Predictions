@@ -1,24 +1,21 @@
-const cron = require('node-cron');
-const db = require('./db');
+const pool = require('./db');
 const openf1 = require('./openf1');
 const { scoreRound } = require('./scorer');
 
 const SEASON = 2026;
 
-// Upsert a result and score it.
-function saveAndScore(round, result) {
-  db.prepare(`
+async function saveAndScore(round, result) {
+  await pool.query(`
     INSERT INTO race_results (race_round, season, result_json, source, updated_at)
-    VALUES (?, ?, ?, 'openf1', CURRENT_TIMESTAMP)
-    ON CONFLICT(race_round, season) DO UPDATE SET
-      result_json = excluded.result_json,
-      source      = excluded.source,
-      updated_at  = excluded.updated_at
-  `).run(round, SEASON, JSON.stringify(result));
-  scoreRound(round, SEASON, result);
+    VALUES ($1, $2, $3, 'openf1', NOW())
+    ON CONFLICT (race_round, season) DO UPDATE SET
+      result_json = EXCLUDED.result_json,
+      source      = EXCLUDED.source,
+      updated_at  = EXCLUDED.updated_at
+  `, [round, SEASON, JSON.stringify(result)]);
+  await scoreRound(round, SEASON, result);
 }
 
-// Fetch results for all past rounds that don't yet have a stored result.
 async function fetchPendingResults() {
   console.log('[scheduler] checking for pending race results…');
   try {
@@ -27,25 +24,26 @@ async function fetchPendingResults() {
       .filter(m => m.meeting_key && m.circuit_short_name && !m.meeting_name?.toLowerCase().includes('testing'))
       .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
 
-    const stored = new Set(
-      db.prepare('SELECT race_round FROM race_results WHERE season = ?').all(SEASON).map(r => r.race_round)
+    const { rows } = await pool.query(
+      'SELECT race_round FROM race_results WHERE season = $1',
+      [SEASON]
     );
+    const stored = new Set(rows.map(r => r.race_round));
 
     const now = Date.now();
     let fetched = 0;
 
     for (let i = 0; i < sorted.length; i++) {
       const round = i + 1;
-      if (stored.has(round)) continue;                          // already have it
-      if (new Date(sorted[i].date_start).getTime() > now) break; // future rounds
+      if (stored.has(round)) continue;
+      if (new Date(sorted[i].date_start).getTime() > now) break;
 
       try {
         const result = await openf1.fetchAndBuildResult(round, SEASON);
-        saveAndScore(round, result);
+        await saveAndScore(round, result);
         console.log(`[scheduler] R${round} fetched and scored ✓`);
         fetched++;
       } catch (err) {
-        // Result not available yet (race in progress or data lag) — try next run
         console.warn(`[scheduler] R${round} not ready: ${err.message}`);
       }
     }
@@ -57,11 +55,5 @@ async function fetchPendingResults() {
     return 0;
   }
 }
-
-// Run daily at 14:00 UTC — covers Sunday races that typically finish by ~13:00 UTC
-cron.schedule('0 14 * * *', fetchPendingResults);
-
-// Also attempt once on startup to catch up if the server was restarted
-setTimeout(fetchPendingResults, 5000);
 
 module.exports = { fetchPendingResults, saveAndScore };

@@ -1,20 +1,14 @@
 const express = require('express');
-const db = require('../db');
+const pool = require('../db');
 const requireAuth = require('../middleware/auth');
 
 const router = express.Router();
 
-// Full leaderboard
-router.get('/', requireAuth, (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   const season = parseInt(req.query.season || 2026);
 
-  const users = db.prepare(
-    'SELECT id, display_name FROM users WHERE is_active = 1'
-  ).all();
-
-  const scores = db.prepare(
-    'SELECT * FROM race_scores WHERE season = ?'
-  ).all(season);
+  const { rows: users } = await pool.query('SELECT id, display_name FROM users WHERE is_active = 1');
+  const { rows: scores } = await pool.query('SELECT * FROM race_scores WHERE season = $1', [season]);
 
   const scoresBy = {};
   for (const s of scores) {

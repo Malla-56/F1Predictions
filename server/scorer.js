@@ -1,7 +1,7 @@
-const db = require('./db');
+const pool = require('./db');
 
-function getScoringRules() {
-  const rows = db.prepare('SELECT rule_key, points FROM scoring_rules').all();
+async function getScoringRules() {
+  const { rows } = await pool.query('SELECT rule_key, points FROM scoring_rules');
   return Object.fromEntries(rows.map(r => [r.rule_key, r.points]));
 }
 
@@ -54,41 +54,40 @@ function scorePrediction(pred, result, rules) {
   return { points: total, breakdown };
 }
 
-function scoreRound(round, season, result) {
-  const rules = getScoringRules();
-  const preds = db.prepare(
-    'SELECT * FROM predictions WHERE race_round = ? AND season = ?'
-  ).all(round, season);
+async function scoreRound(round, season, result) {
+  const rules = await getScoringRules();
+  const { rows: preds } = await pool.query(
+    'SELECT * FROM predictions WHERE race_round = $1 AND season = $2',
+    [round, season]
+  );
 
-  const upsert = db.prepare(`
-    INSERT INTO race_scores (user_id, race_round, season, points_total, breakdown, scored_at)
-    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id, race_round, season)
-    DO UPDATE SET points_total = excluded.points_total,
-                  breakdown    = excluded.breakdown,
-                  scored_at    = excluded.scored_at
-  `);
-
-  const batch = db.transaction(() => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
     for (const pred of preds) {
       const { points, breakdown } = scorePrediction(pred, result, rules);
-      upsert.run(pred.user_id, round, season, points, JSON.stringify(breakdown));
+      await client.query(`
+        INSERT INTO race_scores (user_id, race_round, season, points_total, breakdown, scored_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (user_id, race_round, season) DO UPDATE SET
+          points_total = EXCLUDED.points_total,
+          breakdown    = EXCLUDED.breakdown,
+          scored_at    = EXCLUDED.scored_at
+      `, [pred.user_id, round, season, points, JSON.stringify(breakdown)]);
     }
-  });
-  batch();
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
-function rescoreAll() {
-  const results = db.prepare('SELECT * FROM race_results').all().catch?.() ?? [];
-  // rescoreAll is called after rules change — re-run scoring for all stored results
-  const stored = (() => {
-    try {
-      return db.prepare('SELECT * FROM race_results').all();
-    } catch { return []; }
-  })();
+async function rescoreAll() {
+  const { rows: stored } = await pool.query('SELECT * FROM race_results');
   for (const r of stored) {
-    const result = JSON.parse(r.result_json);
-    scoreRound(r.race_round, r.season, result);
+    await scoreRound(r.race_round, r.season, JSON.parse(r.result_json));
   }
 }
 

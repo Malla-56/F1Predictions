@@ -16,6 +16,7 @@ server/*.sqlite3
 # Build output
 client/dist/
 client/build/
+public/
 
 # Logs
 *.log

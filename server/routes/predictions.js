@@ -1,11 +1,14 @@
 const express = require('express');
-const db = require('../db');
+const pool = require('../db');
 const requireAuth = require('../middleware/auth');
 
 const router = express.Router();
 
-function isRaceLocked(round, season = 2026) {
-  const cfg = db.prepare('SELECT * FROM race_config WHERE race_round = ? AND season = ?').get(round, season);
+async function isRaceLocked(round, season = 2026) {
+  const { rows: [cfg] } = await pool.query(
+    'SELECT * FROM race_config WHERE race_round = $1 AND season = $2',
+    [round, season]
+  );
   if (!cfg) return false;
   if (cfg.manually_locked) return true;
   if (cfg.lock_time && new Date() >= new Date(cfg.lock_time)) return true;
@@ -13,17 +16,17 @@ function isRaceLocked(round, season = 2026) {
 }
 
 // Get all predictions for a round (hides picks before lock unless it's your own)
-router.get('/:round', requireAuth, (req, res) => {
+router.get('/:round', requireAuth, async (req, res) => {
   const round = parseInt(req.params.round);
   const season = parseInt(req.query.season || 2026);
-  const locked = isRaceLocked(round, season);
+  const locked = await isRaceLocked(round, season);
 
-  const rows = db.prepare(`
+  const { rows } = await pool.query(`
     SELECT p.*, u.display_name, u.id as uid
     FROM predictions p
     JOIN users u ON p.user_id = u.id
-    WHERE p.race_round = ? AND p.season = ? AND u.is_active = 1
-  `).all(round, season);
+    WHERE p.race_round = $1 AND p.season = $2 AND u.is_active = 1
+  `, [round, season]);
 
   const result = rows.map(p => {
     const isOwn = p.user_id === req.user.id;
@@ -46,12 +49,13 @@ router.get('/:round', requireAuth, (req, res) => {
 });
 
 // Get my prediction for a round
-router.get('/:round/mine', requireAuth, (req, res) => {
+router.get('/:round/mine', requireAuth, async (req, res) => {
   const round = parseInt(req.params.round);
   const season = parseInt(req.query.season || 2026);
-  const pred = db.prepare(
-    'SELECT * FROM predictions WHERE user_id = ? AND race_round = ? AND season = ?'
-  ).get(req.user.id, round, season);
+  const { rows: [pred] } = await pool.query(
+    'SELECT * FROM predictions WHERE user_id = $1 AND race_round = $2 AND season = $3',
+    [req.user.id, round, season]
+  );
 
   if (!pred) return res.json(null);
   res.json({
@@ -65,11 +69,12 @@ router.get('/:round/mine', requireAuth, (req, res) => {
 });
 
 // Get all my predictions (for My Tips page)
-router.get('/', requireAuth, (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   const season = parseInt(req.query.season || 2026);
-  const preds = db.prepare(
-    'SELECT * FROM predictions WHERE user_id = ? AND season = ? ORDER BY race_round'
-  ).all(req.user.id, season);
+  const { rows: preds } = await pool.query(
+    'SELECT * FROM predictions WHERE user_id = $1 AND season = $2 ORDER BY race_round',
+    [req.user.id, season]
+  );
 
   res.json(preds.map(p => ({
     round: p.race_round,
@@ -82,11 +87,11 @@ router.get('/', requireAuth, (req, res) => {
 });
 
 // Submit / update my prediction for a round
-router.post('/:round', requireAuth, (req, res) => {
+router.post('/:round', requireAuth, async (req, res) => {
   const round = parseInt(req.params.round);
   const season = parseInt(req.query.season || 2026);
 
-  if (isRaceLocked(round, season)) {
+  if (await isRaceLocked(round, season)) {
     return res.status(403).json({ error: 'Predictions are locked for this race' });
   }
 
@@ -95,24 +100,20 @@ router.post('/:round', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'positions must have exactly 10 drivers' });
   }
 
-  db.prepare(`
+  await pool.query(`
     INSERT INTO predictions
       (user_id, race_round, season, pole, pos_1, pos_2, pos_3, pos_4, pos_5, pos_6, pos_7, pos_8, pos_9, pos_10, dnf, sprint_winner, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id, race_round, season) DO UPDATE SET
-      pole = excluded.pole,
-      pos_1 = excluded.pos_1, pos_2 = excluded.pos_2, pos_3 = excluded.pos_3,
-      pos_4 = excluded.pos_4, pos_5 = excluded.pos_5, pos_6 = excluded.pos_6,
-      pos_7 = excluded.pos_7, pos_8 = excluded.pos_8, pos_9 = excluded.pos_9,
-      pos_10 = excluded.pos_10,
-      dnf = excluded.dnf,
-      sprint_winner = excluded.sprint_winner,
-      updated_at = excluded.updated_at
-  `).run(
-    req.user.id, round, season, pole,
-    ...positions,
-    dnf, sprintWinner || null
-  );
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
+    ON CONFLICT (user_id, race_round, season) DO UPDATE SET
+      pole = EXCLUDED.pole,
+      pos_1 = EXCLUDED.pos_1, pos_2 = EXCLUDED.pos_2, pos_3 = EXCLUDED.pos_3,
+      pos_4 = EXCLUDED.pos_4, pos_5 = EXCLUDED.pos_5, pos_6 = EXCLUDED.pos_6,
+      pos_7 = EXCLUDED.pos_7, pos_8 = EXCLUDED.pos_8, pos_9 = EXCLUDED.pos_9,
+      pos_10 = EXCLUDED.pos_10,
+      dnf = EXCLUDED.dnf,
+      sprint_winner = EXCLUDED.sprint_winner,
+      updated_at = EXCLUDED.updated_at
+  `, [req.user.id, round, season, pole, ...positions, dnf, sprintWinner || null]);
 
   res.json({ ok: true });
 });

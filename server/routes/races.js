@@ -1,6 +1,6 @@
 const express = require('express');
 const openf1 = require('../openf1');
-const db = require('../db');
+const pool = require('../db');
 const requireAuth = require('../middleware/auth');
 
 const router = express.Router();
@@ -13,7 +13,10 @@ router.get('/', requireAuth, async (req, res) => {
       openf1.getMeetings(CURRENT_SEASON),
       openf1.getSprintMeetingKeys(CURRENT_SEASON),
     ]);
-    const configs = db.prepare('SELECT * FROM race_config WHERE season = ?').all(CURRENT_SEASON);
+    const { rows: configs } = await pool.query(
+      'SELECT * FROM race_config WHERE season = $1',
+      [CURRENT_SEASON]
+    );
     const configMap = Object.fromEntries(configs.map(c => [c.race_round, c]));
 
     const now = new Date();
