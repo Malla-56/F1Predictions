@@ -54,6 +54,15 @@ export const api = {
     round: (round) => request('GET', `/scores/round/${round}`),
   },
 
+  polls: {
+    active: ()          => request('GET',    '/polls/active'),
+    vote:   (id, optId) => request('POST',   `/polls/${id}/vote`, { option_id: optId }),
+    list:   ()          => request('GET',    '/polls'),
+    create: (data)      => request('POST',   '/polls', data),
+    update: (id, data)  => request('PUT',    `/polls/${id}`, data),
+    remove: (id)        => request('DELETE', `/polls/${id}`),
+  },
+
   admin: {
     overview:    ()               => request('GET',  '/admin/overview'),
     users:       ()               => request('GET',  '/admin/users'),

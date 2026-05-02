@@ -66,6 +66,25 @@ CREATE TABLE IF NOT EXISTS race_results (
   UNIQUE(race_round, season)
 );
 
+CREATE TABLE IF NOT EXISTS polls (
+  id          SERIAL PRIMARY KEY,
+  question    TEXT        NOT NULL,
+  options     JSONB       NOT NULL,
+  is_active   BOOLEAN     NOT NULL DEFAULT false,
+  created_by  INTEGER     REFERENCES users(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  closed_at   TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+  id         SERIAL PRIMARY KEY,
+  poll_id    INTEGER     NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+  user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  option_id  INTEGER     NOT NULL,
+  voted_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (poll_id, user_id)
+);
+
 -- Default scoring rules (idempotent)
 INSERT INTO scoring_rules (rule_key, points, description) VALUES
   ('exact_position',        3, 'Driver guessed in exact correct finishing position'),

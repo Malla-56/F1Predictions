@@ -11,5 +11,6 @@ app.use('/api/results',     require('./routes/results'));
 app.use('/api/scores',      require('./routes/scores'));
 app.use('/api/admin',       require('./routes/admin'));
 app.use('/api/cron',        require('./routes/cron'));
+app.use('/api/polls',       require('./routes/polls'));
 
 module.exports = app;

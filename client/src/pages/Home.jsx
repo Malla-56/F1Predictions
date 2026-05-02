@@ -8,6 +8,7 @@ import Countdown from '../components/Countdown';
 import Avatar from '../components/Avatar';
 import DriverChip from '../components/DriverChip';
 import Icon from '../components/Icon';
+import PollWidget from '../components/PollWidget';
 
 export default function Home({ setToast, theme, setTheme }) {
   const { user } = useAuth();
@@ -85,21 +86,7 @@ export default function Home({ setToast, theme, setTheme }) {
           </div>
         </div>
 
-        {cancelledRaces.length > 0 && (
-          <div className="sec-head" style={{ marginTop: 32, marginBottom: 12 }}>
-            <h2>Cancelled Races</h2>
-          </div>
-        )}
-        {cancelledRaces.map(r => (
-          <div key={r.round} className="card" style={{ padding: '14px 18px', marginBottom: 12, borderColor: 'rgba(225,6,0,0.4)', background: 'var(--red-dim)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)', letterSpacing: '0.08em' }}>
-                ✗ R{String(r.round).padStart(2, '0')} · {r.name}
-              </span>
-              <span className="badge" style={{ background: 'rgba(225,6,0,0.5)', color: 'var(--red)' }}>CANCELLED</span>
-            </div>
-          </div>
-        ))}
+        <PollWidget />
 
         <div className="sec-head">
           <h2>Community Tips</h2>
@@ -120,6 +107,22 @@ export default function Home({ setToast, theme, setTheme }) {
             )}
           </div>
         )}
+
+        {cancelledRaces.length > 0 && (
+          <div className="sec-head" style={{ marginTop: 32, marginBottom: 12 }}>
+            <h2>Cancelled Races</h2>
+          </div>
+        )}
+        {cancelledRaces.map(r => (
+          <div key={r.round} className="card" style={{ padding: '14px 18px', marginBottom: 12, borderColor: 'rgba(225,6,0,0.4)', background: 'var(--red-dim)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)', letterSpacing: '0.08em' }}>
+                ✗ R{String(r.round).padStart(2, '0')} · {r.name}
+              </span>
+              <span className="badge" style={{ background: 'rgba(225,6,0,0.5)', color: 'var(--red)' }}>CANCELLED</span>
+            </div>
+          </div>
+        ))}
 
         {selectedTip && (
           <div className="modal-bg" onClick={() => setSelectedTip(null)}>

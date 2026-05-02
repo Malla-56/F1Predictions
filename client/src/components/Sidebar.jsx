@@ -19,6 +19,7 @@ const ADMIN_NAV = [
   { path: '/admin/results', label: 'Results',   icon: 'results' },
   { path: '/admin/import',  label: 'Import',    icon: 'import'  },
   { path: '/admin/data',    label: 'Data',      icon: 'data'    },
+  { path: '/admin/polls',   label: 'Polls',     icon: 'admin'   },
 ];
 
 export default function Sidebar() {

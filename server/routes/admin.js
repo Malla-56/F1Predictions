@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcrypt');
 const pool = require('../db');
 const openf1 = require('../openf1');
 const requireAuth = require('../middleware/auth');
@@ -23,17 +24,30 @@ router.get('/users', async (req, res) => {
 });
 
 router.put('/users/:id', async (req, res) => {
-  const { role, is_active, display_name } = req.body;
+  const { role, is_active, display_name, password } = req.body;
+
+  if (password !== undefined) {
+    if (parseInt(req.params.id) === req.user.id) {
+      return res.status(400).json({ error: 'Cannot reset your own password this way' });
+    }
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+  }
+
   const { rows: [user] } = await pool.query('SELECT id FROM users WHERE id = $1', [req.params.id]);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  const newHash = password ? await bcrypt.hash(password, 10) : null;
+
   await pool.query(`
     UPDATE users SET
-      role         = COALESCE($1, role),
-      is_active    = COALESCE($2, is_active),
-      display_name = COALESCE($3, display_name)
-    WHERE id = $4
-  `, [role ?? null, is_active ?? null, display_name ?? null, req.params.id]);
+      role          = COALESCE($1, role),
+      is_active     = COALESCE($2, is_active),
+      display_name  = COALESCE($3, display_name),
+      password_hash = COALESCE($4, password_hash)
+    WHERE id = $5
+  `, [role ?? null, is_active ?? null, display_name ?? null, newHash, req.params.id]);
 
   res.json({ ok: true });
 });

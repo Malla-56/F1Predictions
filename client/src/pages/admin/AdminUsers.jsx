@@ -1,10 +1,17 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 import Topbar from '../../components/Topbar';
 import Avatar from '../../components/Avatar';
 
 export default function AdminUsers({ setToast }) {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
+  const [resetTarget, setResetTarget] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   function load() {
     api.admin.users().then(setUsers).catch(() => {});
@@ -30,6 +37,43 @@ export default function AdminUsers({ setToast }) {
     await api.admin.updateUser(user.id, { role: newRole });
     setToast(`${user.display_name} is now ${newRole}`);
     load();
+  }
+
+  function openReset(user) {
+    setResetTarget(user);
+    setNewPassword('');
+    setConfirmPassword('');
+    setResetError('');
+  }
+
+  function closeReset() {
+    setResetTarget(null);
+    setNewPassword('');
+    setConfirmPassword('');
+    setResetError('');
+  }
+
+  async function submitReset(e) {
+    e.preventDefault();
+    setResetError('');
+    if (newPassword.length < 8) {
+      setResetError('Password must be at least 8 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResetError('Passwords do not match');
+      return;
+    }
+    setResetting(true);
+    try {
+      await api.admin.updateUser(resetTarget.id, { password: newPassword });
+      setToast(`Password reset for ${resetTarget.display_name}`);
+      closeReset();
+    } catch (err) {
+      setResetError(err.message);
+    } finally {
+      setResetting(false);
+    }
   }
 
   return (
@@ -77,7 +121,7 @@ export default function AdminUsers({ setToast }) {
                     <span className={`badge dot ${u.is_active ? 'done' : 'pending'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button className="btn" style={{ height: 30, padding: '0 10px', fontSize: 12 }} onClick={() => toggleAdmin(u)}>
                         {u.role === 'admin' ? 'Demote' : 'Make Admin'}
                       </button>
@@ -85,6 +129,15 @@ export default function AdminUsers({ setToast }) {
                         ? <button className="btn danger" style={{ height: 30, padding: '0 10px', fontSize: 12 }} onClick={() => kick(u)}>Kick</button>
                         : <button className="btn" style={{ height: 30, padding: '0 10px', fontSize: 12 }} onClick={() => reactivate(u)}>Restore</button>
                       }
+                      <button
+                        className="btn"
+                        style={{ height: 30, padding: '0 10px', fontSize: 12 }}
+                        disabled={u.id === me?.id}
+                        title={u.id === me?.id ? 'Cannot reset your own password here' : 'Reset password'}
+                        onClick={() => openReset(u)}
+                      >
+                        Reset PW
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -93,6 +146,47 @@ export default function AdminUsers({ setToast }) {
           </table>
         </div>
       </div>
+
+      {resetTarget && (
+        <div className="modal-bg" onClick={closeReset}>
+          <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <h3>Reset Password</h3>
+            <p>Set a new password for <strong>{resetTarget.display_name}</strong>.</p>
+            <form onSubmit={submitReset}>
+              <div className="fld">
+                <label>New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  autoFocus
+                />
+              </div>
+              <div className="fld">
+                <label>Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat password"
+                />
+              </div>
+              {resetError && (
+                <div className="mono" style={{ fontSize: 11, color: 'var(--red)', marginBottom: 14 }}>
+                  {resetError}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn" onClick={closeReset}>Cancel</button>
+                <button type="submit" className="btn primary" disabled={resetting}>
+                  {resetting ? 'Saving…' : 'Reset Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }
