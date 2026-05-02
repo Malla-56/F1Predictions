@@ -19,7 +19,10 @@ export default function Home({ setToast, theme, setTheme }) {
   const [loading, setLoading] = useState(false);
   const [selectedTip, setSelectedTip] = useState(null);
 
-  const upcoming = races.find(r => r.status === 'upcoming' && !r.isCancelled) || races.find(r => r.status === 'future' && !r.isCancelled);
+  const current  = races.find(r => r.status === 'current'  && !r.isCancelled);
+  const upcoming = current
+    || races.find(r => r.status === 'upcoming' && !r.isCancelled)
+    || races.find(r => r.status === 'future'   && !r.isCancelled);
   const cancelledRaces = races.filter(r => r.isCancelled);
 
   useEffect(() => {
@@ -33,7 +36,7 @@ export default function Home({ setToast, theme, setTheme }) {
 
   const topbarRight = (
     <>
-      {upcoming && <span className="badge dot locked">R{upcoming.round} · Open</span>}
+      {upcoming && <span className="badge dot locked">R{upcoming.round} · {current ? 'Race Day' : 'Open'}</span>}
       <button className="icon-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme">
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
       </button>
@@ -61,7 +64,7 @@ export default function Home({ setToast, theme, setTheme }) {
               <span className="live-dot" />
               <span>Round {String(upcoming.round).padStart(2, '0')} / 2025</span>
               <span style={{ color: 'var(--line-2)' }}>·</span>
-              <span>Next Race</span>
+              <span>{current ? 'Race Weekend' : 'Next Race'}</span>
             </div>
             <h1 className="hero-title">{upcoming.name}</h1>
             <div className="hero-circuit">
@@ -72,11 +75,13 @@ export default function Home({ setToast, theme, setTheme }) {
                 {new Date(upcoming.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}
               </span>
             </div>
-            <div className="hero-actions">
-              <button className="btn primary" onClick={() => navigate(`/predict/${upcoming.round}`)}>
-                Enter your tips <span className="arrow">→</span>
-              </button>
-            </div>
+            {!current && (
+              <div className="hero-actions">
+                <button className="btn primary" onClick={() => navigate(`/predict/${upcoming.round}`)}>
+                  Enter your tips <span className="arrow">→</span>
+                </button>
+              </div>
+            )}
           </div>
           <div className="hero-right">
             <Countdown target={upcoming.lockTime} />

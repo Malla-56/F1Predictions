@@ -30,7 +30,7 @@ router.get('/:round', requireAuth, async (req, res) => {
 
   const result = rows.map(p => {
     const isOwn = p.user_id === req.user.id;
-    const reveal = locked || isOwn;
+    const reveal = true;
     return {
       userId: p.user_id,
       displayName: p.display_name,

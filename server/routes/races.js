@@ -13,11 +13,12 @@ router.get('/', requireAuth, async (req, res) => {
       openf1.getMeetings(CURRENT_SEASON),
       openf1.getSprintMeetingKeys(CURRENT_SEASON),
     ]);
-    const { rows: configs } = await pool.query(
-      'SELECT * FROM race_config WHERE season = $1',
-      [CURRENT_SEASON]
-    );
+    const [{ rows: configs }, { rows: resultRows }] = await Promise.all([
+      pool.query('SELECT * FROM race_config WHERE season = $1', [CURRENT_SEASON]),
+      pool.query('SELECT race_round FROM race_results WHERE season = $1', [CURRENT_SEASON]),
+    ]);
     const configMap = Object.fromEntries(configs.map(c => [c.race_round, c]));
+    const roundsWithResults = new Set(resultRows.map(r => r.race_round));
 
     const now = new Date();
     const races = meetings
@@ -29,10 +30,13 @@ router.get('/', requireAuth, async (req, res) => {
         const lockTime = cfg.lock_time ? new Date(cfg.lock_time) : new Date(m.date_start);
         const isLocked = cfg.manually_locked === 1 || now >= lockTime;
         const raceDate = new Date(m.date_start);
-        let status = 'future';
-        if (raceDate < now && isLocked) status = 'done';
-        else if (isLocked) status = 'locked';
-        else status = 'upcoming';
+        const hasResult = roundsWithResults.has(round);
+
+        let status;
+        if (isLocked && raceDate < now && hasResult) status = 'done';
+        else if (isLocked && raceDate < now)         status = 'current';
+        else if (isLocked)                           status = 'locked';
+        else                                         status = 'upcoming';
 
         return {
           id: m.meeting_key,
@@ -46,6 +50,7 @@ router.get('/', requireAuth, async (req, res) => {
           isLocked,
           isSprint: sprintKeys.has(m.meeting_key) || cfg.is_sprint === 1,
           isCancelled: cfg.cancelled === 1,
+          hasResult,
           status,
         };
       });
