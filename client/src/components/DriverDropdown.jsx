@@ -5,13 +5,34 @@ import DriverChip from './DriverChip';
 export default function DriverDropdown({ value, onChange, exclude = [], placeholder = 'Select driver' }) {
   const { drivers } = useAppData();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const ref = useRef(null);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     const handler = e => { if (!ref.current?.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  useEffect(() => {
+    if (open) {
+      setQuery('');
+      // Let the menu mount before focusing.
+      requestAnimationFrame(() => searchRef.current?.focus());
+    }
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? drivers.filter(d => (
+        d.id?.toLowerCase().includes(q) ||
+        d.firstName?.toLowerCase().includes(q) ||
+        d.lastName?.toLowerCase().includes(q) ||
+        `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
+        String(d.num).includes(q)
+      ))
+    : drivers;
 
   return (
     <div ref={ref} className={`dropdown${open ? ' open' : ''}`}>
@@ -21,7 +42,20 @@ export default function DriverDropdown({ value, onChange, exclude = [], placehol
       </button>
       {open && (
         <div className="dropdown-menu">
-          {drivers.map(d => {
+          <div className="dropdown-search">
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search name or number…"
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+          {filtered.length === 0 && (
+            <div className="dropdown-empty">No drivers match "{query}"</div>
+          )}
+          {filtered.map(d => {
             const disabled = exclude.includes(d.id) && d.id !== value;
             return (
               <div

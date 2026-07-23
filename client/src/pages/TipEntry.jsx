@@ -5,8 +5,9 @@ import { useAppData } from '../context/AppDataContext';
 import Topbar from '../components/Topbar';
 import DriverChip from '../components/DriverChip';
 import DriverDropdown from '../components/DriverDropdown';
+import useIsMobile from '../hooks/useIsMobile';
 
-function DragRow({ position, driverId, onSwap, dragState, setDragState }) {
+function DragRow({ position, driverId, onSwap, dragState, setDragState, onMove, isLast, isMobile }) {
   const onDragStart = e => { setDragState({ from: position }); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(position)); };
   const onDragOver  = e => { e.preventDefault(); setDragState(s => ({ ...s, over: position })); };
   const onDrop      = e => { e.preventDefault(); const from = Number(e.dataTransfer.getData('text/plain')); if (from !== position) onSwap(from, position); setDragState({}); };
@@ -16,10 +17,17 @@ function DragRow({ position, driverId, onSwap, dragState, setDragState }) {
   const pill = position === 0 ? 'gold' : position < 3 ? 'silver' : '';
 
   return (
-    <div className={cls} draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}>
+    <div className={cls} draggable={!isMobile} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}>
       <div className={`pos-pill${pill ? ' ' + pill : ''}`}>P{position + 1}</div>
       {driverId ? <DriverChip driverId={driverId} showName /> : <span className="muted">empty slot</span>}
-      <div className="grip">⋮⋮</div>
+      {isMobile && onMove ? (
+        <div className="reorder-btns">
+          <button type="button" className="reorder-btn" disabled={position === 0} onClick={() => onMove(position, position - 1)} aria-label="Move up">▲</button>
+          <button type="button" className="reorder-btn" disabled={isLast} onClick={() => onMove(position, position + 1)} aria-label="Move down">▼</button>
+        </div>
+      ) : (
+        <div className="grip">⋮⋮</div>
+      )}
     </div>
   );
 }
@@ -29,6 +37,7 @@ export default function TipEntry({ setToast }) {
   const navigate = useNavigate();
   const { races, countryFlag } = useAppData();
   const race = races.find(r => r.round === parseInt(round));
+  const isMobile = useIsMobile();
 
   const [top10, setTop10] = useState(Array(10).fill(null));
   const [pole, setPole] = useState(null);
@@ -217,13 +226,22 @@ export default function TipEntry({ setToast }) {
           <div className="entry-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3>Race Finish · P1 → P10</h3>
-              {!isLocked && <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.06em' }}>Drag rows to reorder</span>}
+              {!isLocked && (
+                <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.06em' }}>
+                  {isMobile ? 'Tap ▲▼ or pick a driver' : 'Drag rows to reorder'}
+                </span>
+              )}
             </div>
 
             <div className="draglist">
               {top10.map((id, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: isLocked ? '1fr' : '1fr 1fr', gap: 10 }}>
-                  <DragRow position={i} driverId={id} onSwap={swap} dragState={dragState} setDragState={setDragState} />
+                <div key={i} className={`draglist-item${!isLocked && !isMobile ? ' pair' : ''}`}>
+                  <DragRow
+                    position={i} driverId={id} onSwap={swap}
+                    dragState={dragState} setDragState={setDragState}
+                    isMobile={isMobile} isLast={i === top10.length - 1}
+                    onMove={!isLocked ? swap : null}
+                  />
                   {!isLocked && (
                     <DriverDropdown value={id} onChange={d => setSlot(i, d)} exclude={top10} />
                   )}
@@ -232,11 +250,11 @@ export default function TipEntry({ setToast }) {
             </div>
 
             {!isLocked && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+              <div className="entry-submit-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
                 <div className="mono" style={{ fontSize: 11, color: valid ? 'var(--green)' : 'var(--text-3)', letterSpacing: '0.08em' }}>
                   {valid ? '✓ ALL PICKS COMPLETE' : '✗ INCOMPLETE PICKS'}
                 </div>
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div className="entry-submit-actions" style={{ display: 'flex', gap: 10 }}>
                   <button className="btn ghost" onClick={saveDraft}>Save draft</button>
                   <button className="btn primary" disabled={!valid} onClick={() => setShowConfirm(true)}>
                     Submit tips →

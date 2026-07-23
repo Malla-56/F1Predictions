@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useAppData } from '../context/AppDataContext';
 import Topbar from '../components/Topbar';
 import Avatar from '../components/Avatar';
+import useIsMobile from '../hooks/useIsMobile';
 
 export default function Scoreboard() {
   const { races } = useAppData();
@@ -10,6 +11,7 @@ export default function Scoreboard() {
   const [sortKey, setSortKey] = useState('total');
   const [sortDir, setSortDir] = useState('desc');
   const [expanded, setExpanded] = useState(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     api.scores.leaderboard().then(setRows).catch(() => {});
@@ -52,19 +54,73 @@ export default function Scoreboard() {
         </div>
 
         <div className="score-table">
-          <div className="score-row head">
-            <SortHd k="rank" label="Rank" />
-            <span></span>
-            <span>Tipper</span>
-            <SortHd k="total" label="Total Pts" />
-            <span className="mono">{lastRound ? `R${lastRound.round}` : '—'}</span>
-            <SortHd k="played" label="Rounds" />
-            <span></span>
-          </div>
+          {!isMobile && (
+            <div className="score-row head">
+              <SortHd k="rank" label="Rank" />
+              <span></span>
+              <span>Tipper</span>
+              <SortHd k="total" label="Total Pts" />
+              <span className="mono">{lastRound ? `R${lastRound.round}` : '—'}</span>
+              <SortHd k="played" label="Rounds" />
+              <span></span>
+            </div>
+          )}
+
+          {isMobile && (
+            <div className="score-sort-bar">
+              <SortHd k="total" label="Total" />
+              <SortHd k="played" label="Rounds" />
+            </div>
+          )}
 
           {sorted.map(r => {
             const lastPts = lastRound ? (r.perRace?.[lastRound.round]?.points ?? 0) : 0;
             const isOpen = expanded === r.userId;
+
+            const expandPanel = isOpen && (
+              <div key={`${r.userId}-exp`} className="score-expand">
+                {races.map(race => {
+                  const entry = r.perRace?.[race.round];
+                  const isDone = race.status === 'done';
+                  return (
+                    <div key={race.round} className="exp-cell"
+                         style={isDone && entry?.points >= 10 ? { borderColor: 'rgba(225,6,0,0.4)' } : !isDone ? { opacity: 0.4 } : {}}>
+                      <span className="r">R{String(race.round).padStart(2, '0')}</span>
+                      <span className={`p${!isDone || !entry ? ' bad' : ''}`}>
+                        {isDone && entry ? entry.points : '—'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+
+            if (isMobile) {
+              return (
+                <div key={r.userId}>
+                  <div
+                    className={`score-card${r.isMe ? ' me' : ''}${isOpen ? ' expanded' : ''}`}
+                    onClick={() => setExpanded(isOpen ? null : r.userId)}
+                  >
+                    <span className={`rank${r.rank === 1 ? ' gold' : ''}`}>{String(r.rank).padStart(2, '0')}</span>
+                    <Avatar displayName={r.displayName} size={32} isMe={r.isMe} />
+                    <div className="score-card-mid">
+                      <div className="name">{r.displayName}</div>
+                      <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                        {r.played} / {races.length} rounds · last {lastPts} pts
+                      </span>
+                    </div>
+                    <div className="score-card-pts">
+                      <span className="num">{r.total}</span>
+                      <span className="delta">+{lastPts}</span>
+                    </div>
+                    <span className="chev">▾</span>
+                  </div>
+                  {expandPanel}
+                </div>
+              );
+            }
+
             return (
               <>
                 <div
@@ -81,23 +137,7 @@ export default function Scoreboard() {
                   <span className="chev">▾</span>
                 </div>
 
-                {isOpen && (
-                  <div key={`${r.userId}-exp`} className="score-expand">
-                    {races.map(race => {
-                      const entry = r.perRace?.[race.round];
-                      const isDone = race.status === 'done';
-                      return (
-                        <div key={race.round} className="exp-cell"
-                             style={isDone && entry?.points >= 10 ? { borderColor: 'rgba(225,6,0,0.4)' } : !isDone ? { opacity: 0.4 } : {}}>
-                          <span className="r">R{String(race.round).padStart(2, '0')}</span>
-                          <span className={`p${!isDone || !entry ? ' bad' : ''}`}>
-                            {isDone && entry ? entry.points : '—'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                {expandPanel}
               </>
             );
           })}

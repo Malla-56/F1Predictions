@@ -3,7 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppDataProvider } from './context/AppDataContext';
 import Sidebar from './components/Sidebar';
+import MobileNav from './components/MobileNav';
 import Toast from './components/Toast';
+import useIsMobile from './hooks/useIsMobile';
 
 import Login from './pages/Login';
 import Home from './pages/Home';
@@ -37,6 +39,7 @@ function RequireAdmin({ children }) {
 
 function AppShell() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
 
@@ -58,6 +61,28 @@ function AppShell() {
         <Route path="/" element={<Login />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+    );
+  }
+
+  // Mobile mode: leaderboard, tips and results only — no admin, no desktop sidebar.
+  if (isMobile) {
+    return (
+      <AppDataProvider>
+        <div className="app app-mobile">
+          <MobileNav />
+          <main className="main mobile-main">
+            <Routes>
+              <Route path="/tips" element={<MyTips />} />
+              <Route path="/predict/:round" element={<TipEntry setToast={setToast} />} />
+              <Route path="/results" element={<Results setToast={setToast} />} />
+              <Route path="/scoreboard" element={<Scoreboard />} />
+              <Route path="/stats" element={<Stats />} />
+              <Route path="*" element={<Navigate to="/tips" replace />} />
+            </Routes>
+          </main>
+        </div>
+        <Toast msg={toast} />
+      </AppDataProvider>
     );
   }
 
