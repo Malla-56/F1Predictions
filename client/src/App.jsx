@@ -69,7 +69,7 @@ function AppShell() {
     return (
       <AppDataProvider>
         <div className="app app-mobile">
-          <MobileNav />
+          <MobileNav setToast={setToast} />
           <main className="main mobile-main">
             <Routes>
               <Route path="/tips" element={<MyTips />} />

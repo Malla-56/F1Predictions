@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from './Icon';
+import NotifyButton from './NotifyButton';
 import { useAuth } from '../context/AuthContext';
 
 const MOBILE_NAV = [
@@ -9,7 +10,7 @@ const MOBILE_NAV = [
   { path: '/stats',      label: 'Stats',      icon: 'stats' },
 ];
 
-export default function MobileNav() {
+export default function MobileNav({ setToast }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { logout } = useAuth();
@@ -24,9 +25,12 @@ export default function MobileNav() {
             <div className="row2">Pitlane Picks</div>
           </div>
         </div>
-        <button className="mobile-logout" onClick={logout} aria-label="Sign out">
-          <Icon name="logout" size={18} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <NotifyButton setToast={setToast} />
+          <button className="mobile-logout" onClick={logout} aria-label="Sign out">
+            <Icon name="logout" size={18} />
+          </button>
+        </div>
       </header>
 
       <nav className="mobile-tabbar">
