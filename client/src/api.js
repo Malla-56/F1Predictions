@@ -17,9 +17,9 @@ async function request(method, path, body) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    const message = typeof err.error === 'string' && err.error
-      ? err.error
-      : (typeof err.message === 'string' && err.message) || `HTTP ${res.status}`;
+    // Vercel platform errors (e.g. Deployment Protection) nest it: { error: { code, message } }
+    const candidates = [err.error, err.error?.message, err.message];
+    const message = candidates.find(m => typeof m === 'string' && m) || `HTTP ${res.status}`;
     throw new Error(message);
   }
 
