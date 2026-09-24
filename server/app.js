@@ -13,4 +13,12 @@ app.use('/api/admin',       require('./routes/admin'));
 app.use('/api/cron',        require('./routes/cron'));
 app.use('/api/polls',       require('./routes/polls'));
 
+// Safety net: catches sync throws / next(err) from any route so clients always
+// get { error: string } JSON instead of a raw platform error page.
+app.use((err, req, res, next) => {
+  console.error('unhandled error', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 module.exports = app;

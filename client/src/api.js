@@ -17,7 +17,10 @@ async function request(method, path, body) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    const message = typeof err.error === 'string' && err.error
+      ? err.error
+      : (typeof err.message === 'string' && err.message) || `HTTP ${res.status}`;
+    throw new Error(message);
   }
 
   return res.json();
