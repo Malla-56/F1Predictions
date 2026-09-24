@@ -77,7 +77,25 @@ export default function NotifyButton({ setToast }) {
     }
   }
 
+  async function sendTest() {
+    setBusy(true);
+    try {
+      const { delivered } = await api.push.test(true);
+      toast(delivered > 0 ? 'Test notification sent' : 'No devices subscribed — try turning reminders off and on');
+    } catch (err) {
+      toast(`Test failed: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
+    <>
+    {enabled && (
+      <button className="btn" onClick={sendTest} disabled={busy} title="Send a test notification">
+        Test
+      </button>
+    )}
     <button
       className="icon-btn"
       onClick={onClick}
@@ -87,5 +105,6 @@ export default function NotifyButton({ setToast }) {
     >
       <Icon name="bell" size={16} />
     </button>
+    </>
   );
 }

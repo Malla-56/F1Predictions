@@ -70,7 +70,7 @@ export const api = {
     publicKey:   ()      => request('GET',  '/push/public-key'),
     subscribe:   (sub)   => request('POST', '/push/subscribe', sub),
     unsubscribe: (endpoint) => request('POST', '/push/unsubscribe', { endpoint }),
-    test:        ()      => request('POST', '/push/test'),
+    test:        (random) => request('POST', '/push/test', { random: !!random }),
   },
 
   admin: {
