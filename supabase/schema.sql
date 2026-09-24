@@ -93,3 +93,23 @@ INSERT INTO scoring_rules (rule_key, points, description) VALUES
   ('dnf_correct',           1, 'DNF driver guess is correct'),
   ('sprint_winner_correct', 2, 'Sprint race winner guess is correct (sprint weekends only)')
 ON CONFLICT (rule_key) DO NOTHING;
+
+-- Web Push subscriptions (one row per browser/device a user enabled notifications on)
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint    TEXT        UNIQUE NOT NULL,
+  p256dh      TEXT        NOT NULL,
+  auth        TEXT        NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Tracks which tip reminders were already sent so the cron never double-notifies
+CREATE TABLE IF NOT EXISTS tip_reminders_sent (
+  user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  race_round  INTEGER     NOT NULL,
+  season      INTEGER     NOT NULL,
+  days_before INTEGER     NOT NULL,
+  sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, race_round, season, days_before)
+);

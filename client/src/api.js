@@ -66,6 +66,13 @@ export const api = {
     remove: (id)        => request('DELETE', `/polls/${id}`),
   },
 
+  push: {
+    publicKey:   ()      => request('GET',  '/push/public-key'),
+    subscribe:   (sub)   => request('POST', '/push/subscribe', sub),
+    unsubscribe: (endpoint) => request('POST', '/push/unsubscribe', { endpoint }),
+    test:        ()      => request('POST', '/push/test'),
+  },
+
   admin: {
     overview:    ()               => request('GET',  '/admin/overview'),
     users:       ()               => request('GET',  '/admin/users'),

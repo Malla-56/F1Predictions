@@ -12,6 +12,7 @@ app.use('/api/scores',      require('./routes/scores'));
 app.use('/api/admin',       require('./routes/admin'));
 app.use('/api/cron',        require('./routes/cron'));
 app.use('/api/polls',       require('./routes/polls'));
+app.use('/api/push',        require('./routes/push'));
 
 // Safety net: catches sync throws / next(err) from any route so clients always
 // get { error: string } JSON instead of a raw platform error page.

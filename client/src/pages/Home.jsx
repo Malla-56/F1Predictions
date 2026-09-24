@@ -9,6 +9,7 @@ import Avatar from '../components/Avatar';
 import DriverChip from '../components/DriverChip';
 import Icon from '../components/Icon';
 import PollWidget from '../components/PollWidget';
+import NotifyButton from '../components/NotifyButton';
 
 export default function Home({ setToast, theme, setTheme }) {
   const { user } = useAuth();
@@ -37,6 +38,7 @@ export default function Home({ setToast, theme, setTheme }) {
   const topbarRight = (
     <>
       {upcoming && <span className="badge dot locked">R{upcoming.round} · {current ? 'Race Day' : 'Open'}</span>}
+      <NotifyButton setToast={setToast} />
       <button className="icon-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme">
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
       </button>

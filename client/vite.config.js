@@ -25,6 +25,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Push + notification-click handlers for tip reminders
+        importScripts: ['push-sw.js'],
         // API calls should always hit the network — never serve stale tips/results.
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
