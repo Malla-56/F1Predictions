@@ -444,6 +444,109 @@ a { color: inherit; text-decoration: none; }
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em;
 }
 
+/* Tip Entry — tap a slot, then tap a driver */
+.entry-simple { display: flex; flex-direction: column; gap: 14px; max-width: 720px; }
+.entry-progress { display: flex; flex-direction: column; gap: 8px; }
+.entry-progress-txt { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); }
+.entry-progress-txt .mono { color: var(--text); font-weight: 600; }
+.entry-progress-bar { height: 4px; background: var(--surface-3); border-radius: 2px; overflow: hidden; }
+.entry-progress-bar span { display: block; height: 100%; background: var(--red); transition: width 0.2s; }
+.slot-list { display: flex; flex-direction: column; gap: 6px; }
+.slot-row {
+  display: flex; align-items: stretch;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 3px;
+}
+.slot-row:not(.locked):not(.filled) { border-style: dashed; }
+.slot-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px 8px 8px; min-height: 48px;
+  background: none; border: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.slot-main:disabled { cursor: default; }
+.slot-row:not(.locked):hover { border-color: var(--line-2); }
+.slot-main:active:not(:disabled) { background: var(--surface-2); }
+.slot-driver { flex: 1; min-width: 0; font-family: var(--display); font-weight: 600; font-size: 13.5px; }
+.slot-empty { color: var(--text-3); font-weight: 500; }
+.slot-hint { font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.04em; text-align: right; max-width: 45%; }
+.slot-clear {
+  width: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; border-left: 1px solid var(--line); color: var(--text-3); cursor: pointer;
+}
+.slot-clear:hover { color: var(--red-2); }
+.slot-row .pos-pill {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  min-width: 38px; height: 30px; padding: 0 4px; border-radius: 3px;
+  font-family: var(--mono); font-weight: 600; font-size: 11px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2);
+}
+.slot-row .pos-pill.gold { background: var(--red); border-color: var(--red); color: #fff; }
+.slot-row .pos-pill.silver { background: rgba(225,6,0,0.18); border-color: rgba(225,6,0,0.35); color: var(--red-2); }
+.slot-row .pos-pill.bonus { color: var(--amber); border-color: rgba(255,179,0,0.35); }
+.entry-guide summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+.entry-guide summary::-webkit-details-marker { display: none; }
+.entry-guide summary::after { content: '▾'; color: var(--text-3); font-family: var(--mono); }
+.entry-guide[open] summary::after { transform: rotate(180deg); }
+.entry-guide:not([open]) { gap: 0; }
+.entry-submit-bar {
+  display: flex; gap: 10px; align-items: center; justify-content: flex-end;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px;
+}
+
+/* Driver picker sheet */
+.sheet-bg {
+  position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.6);
+  display: grid; place-items: center; padding: 24px;
+  animation: fadein 0.16s ease-out; backdrop-filter: blur(4px);
+}
+.sheet {
+  width: 600px; max-width: 100%; max-height: 85vh; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  animation: modalin 0.22s cubic-bezier(.2,.7,.3,1);
+}
+.sheet-hd { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+.sheet-title { flex: 1; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.sheet-title strong { font-family: var(--display); font-size: 18px; }
+.sheet-title span { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); letter-spacing: 0.04em; }
+.sheet-nav {
+  width: 44px; height: 44px; flex-shrink: 0; border-radius: 3px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text); font-size: 22px; cursor: pointer;
+}
+.sheet-nav:disabled { opacity: 0.3; cursor: default; }
+.pick-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  padding: 12px; overflow-y: auto; overscroll-behavior: contain;
+}
+.pick-tile {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 9px 8px 9px 12px; min-height: 52px; text-align: left; cursor: pointer;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 3px; color: var(--text);
+  font-family: var(--display); overflow: hidden;
+}
+.pick-tile::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--team-color); }
+.pick-tile:hover { border-color: var(--line-2); }
+.pick-tile:active { background: var(--surface-3); }
+.pick-tile .abbr { font-weight: 700; font-size: 15px; letter-spacing: 0.03em; }
+.pick-tile .lname { font-size: 11px; color: var(--text-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-tile.selected { border-color: var(--red); background: var(--red-dim); }
+.pick-tile.taken { opacity: 0.55; }
+.pick-tile .badge-pos {
+  position: absolute; top: 4px; right: 4px; font-family: var(--mono); font-size: 9.5px; font-weight: 600;
+  padding: 1px 4px; border-radius: 2px; background: var(--surface-3); color: var(--text-2);
+}
+.sheet-ft { display: flex; gap: 10px; justify-content: space-between; padding: 12px; border-top: 1px solid var(--line); }
+.sheet-ft .btn { min-width: 110px; justify-content: center; }
+@media (max-width: 768px) {
+  .sheet-bg { padding: 0; align-items: end; }
+  .sheet {
+    width: 100%; max-height: 88dvh; border-radius: 14px 14px 0 0; border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheetin 0.24s cubic-bezier(.2,.7,.3,1);
+  }
+  .pick-grid { grid-template-columns: repeat(3, 1fr); }
+  .sheet-ft .btn { flex: 1; height: 46px; }
+}
+@keyframes sheetin { from { transform: translateY(100%); } to { transform: none; } }
+
 /* Drag list */
 .draglist { display: flex; flex-direction: column; gap: 6px; }
 .dragrow {
@@ -566,14 +669,27 @@ a { color: inherit; text-decoration: none; }
   padding: 36px 36px 32px; z-index: 1;
 }
 .login-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--red); }
-.login-tabs { display: flex; gap: 4px; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
-.login-tabs button {
-  flex: 1; padding: 12px 8px 14px; background: transparent; border: 0;
-  color: var(--text-3); font-family: var(--display); font-weight: 600; font-size: 13px;
-  letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; position: relative; transition: color 0.14s;
+.login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+.login-brand .brand-mark { width: 36px; height: 36px; }
+.login-brand-name { font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: 0.02em; }
+.login-brand-sub { font-size: 10px; letter-spacing: 0.18em; color: var(--text-3); text-transform: uppercase; margin-top: 2px; }
+.login-title { font-family: var(--display); font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 6px; }
+.login-lede { color: var(--text-2); margin: 0 0 24px; }
+.login-btn { width: 100%; height: 48px; justify-content: center; font-size: 15px; gap: 10px; }
+.login-passkey { margin-top: 12px; }
+.login-divider {
+  display: flex; align-items: center; gap: 12px; margin: 20px 0;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3);
 }
-.login-tabs button.active { color: var(--text); }
-.login-tabs button.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--red); }
+.login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.login-error {
+  font-size: 13px; color: var(--red-2); background: var(--red-dim);
+  border: 1px solid rgba(225,6,0,0.35); border-radius: 3px; padding: 10px 12px; margin-bottom: 14px;
+}
+.login-switch { text-align: center; margin-top: 22px; color: var(--text-3); font-size: 13px; }
+.login-switch button {
+  background: none; border: 0; padding: 4px; color: var(--red-2); font: inherit; font-weight: 600; cursor: pointer;
+}
 .fld { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .fld label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); }
 .fld input {
@@ -582,6 +698,48 @@ a { color: inherit; text-decoration: none; }
   outline: none; transition: border-color 0.14s; width: 100%;
 }
 .fld input:focus { border-color: var(--red); }
+.fld-password { position: relative; }
+.fld-password input { padding-right: 48px; }
+.fld-reveal {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 46px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; color: var(--text-3); cursor: pointer;
+}
+.fld-reveal:hover { color: var(--text); }
+
+/* Login — phones: drop the floating card, go full screen with thumb-sized controls */
+@media (max-width: 768px) {
+  .login-bg {
+    place-items: stretch;
+    min-height: 100dvh;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .login-card {
+    width: 100%; max-width: none; border: 0; border-radius: 0; background: transparent;
+    padding: 40px 22px 28px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .login-card::before { display: none; }
+  .login-brand { margin-bottom: 36px; }
+  .login-title { font-size: 30px; }
+  /* 16px+ stops iOS Safari zooming the page when an input is focused */
+  .login-card .fld input { height: 52px; font-size: 16px; }
+  .login-btn { height: 54px; font-size: 16px; }
+}
+
+/* Passkey enrolment banner (shown once after sign-in on capable devices) */
+.passkey-banner {
+  display: flex; align-items: center; gap: 12px;
+  margin: 16px 28px 0; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--red); border-radius: 4px;
+}
+.passkey-banner .ico { color: var(--red-2); flex-shrink: 0; display: flex; }
+.passkey-banner .txt { flex: 1; min-width: 0; font-size: 13px; }
+.passkey-banner .txt strong { display: block; font-family: var(--display); font-size: 14px; }
+.passkey-banner .txt span { color: var(--text-2); }
+.passkey-banner .acts { display: flex; gap: 6px; align-items: center; }
+.passkey-banner .x { background: none; border: 0; color: var(--text-3); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.app-mobile .passkey-banner { margin: 12px 14px 0; flex-wrap: wrap; }
 
 /* Modal */
 .modal-bg {
@@ -751,9 +909,11 @@ a { color: inherit; text-decoration: none; }
 
 /* Tip Entry — mobile */
 .app-mobile .entry-card { padding: 16px; gap: 14px; }
-.app-mobile .entry-submit-bar { flex-direction: column; align-items: stretch !important; gap: 12px; }
-.app-mobile .entry-submit-actions { flex-direction: column-reverse; }
-.app-mobile .entry-submit-actions .btn { width: 100%; justify-content: center; }
+.app-mobile .entry-submit-bar {
+  position: sticky; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 5;
+  margin: 0 -14px; padding: 12px 14px; border-radius: 0; border-left: 0; border-right: 0;
+}
+.app-mobile .entry-submit-bar .btn.primary { flex: 1; }
 
 /* My Tips — mobile card layout (replaces the fixed-column table) */
 .mytips-card {

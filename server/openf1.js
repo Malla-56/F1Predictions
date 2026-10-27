@@ -34,10 +34,20 @@ async function cached(key, fetcher, ttl = TTL_STATIC) {
   return promise;
 }
 
-async function get(path) {
-  const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`OpenF1 ${path} → ${res.status}`);
-  return res.json();
+// OpenF1 rate-limits bursts (~30 requests/window) — back off and retry on 429/5xx
+// instead of failing, so a cold-cache "Fetch all" doesn't need a second press.
+async function get(path, tries = 3) {
+  for (let i = 0; ; i++) {
+    const res = await fetch(`${BASE}${path}`);
+    if (res.ok) return res.json();
+    if (i < tries - 1 && (res.status === 429 || res.status >= 500)) {
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const waitMs = Math.min((retryAfter > 0 ? retryAfter : 2 ** i) * 1000, 5000);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+    throw new Error(`OpenF1 ${path} → ${res.status}`);
+  }
 }
 
 async function getMeetings(year = 2026) {
@@ -65,6 +75,33 @@ async function getDrivers(sessionKey) {
   if (!sessionKey) return [];
   return cached(`drivers_${sessionKey}`, () => get(`/drivers?session_key=${sessionKey}`));
 }
+
+// Current championship standings, taken from the most recent race that has finished.
+// OpenF1 only publishes standings once a race is complete (404 before that), so walk
+// back through past races until one has data.
+// The whole lookup is cached for an hour (empty results included) so it can't eat into
+// OpenF1's rate limit, which the results fetch also depends on.
+async function getStandings(kind, year = 2026) {
+  return cached(`standings_${kind}_${year}`, async () => {
+    const sessions = await cached(`sessions_year_${year}`, () => get(`/sessions?year=${year}`));
+    const finished = sessions
+      .filter(s => s.session_type === 'Race' && !s.is_cancelled && new Date(s.date_end || s.date_start) < new Date())
+      .sort((a, b) => new Date(b.date_start) - new Date(a.date_start))
+      .slice(0, 2);
+    for (const s of finished) {
+      try {
+        const rows = await get(`/championship_${kind}?session_key=${s.session_key}`);
+        if (rows.length) return rows;
+      } catch {
+        // Not published yet for this race — try the one before.
+      }
+    }
+    return [];
+  }, 60 * 60 * 1000);
+}
+
+const getTeamStandings   = year => getStandings('teams', year);
+const getDriverStandings = year => getStandings('drivers', year);
 
 async function getPosition(sessionKey) {
   if (!sessionKey) return [];
@@ -154,4 +191,4 @@ async function fetchAndBuildResult(round, season = 2026) {
   return { finishOrder, pole, dnfs, sprintPole, sprintFinishOrder, sprintDnfs };
 }
 
-module.exports = { getMeetings, getSessions, getLatestSessionKey, getSprintMeetingKeys, getDrivers, getPosition, getRaceResult, fetchAndBuildResult, invalidate };
+module.exports = { getMeetings, getSessions, getLatestSessionKey, getSprintMeetingKeys, getDrivers, getTeamStandings, getDriverStandings, getPosition, getRaceResult, fetchAndBuildResult, invalidate };

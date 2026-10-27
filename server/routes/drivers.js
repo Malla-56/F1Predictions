@@ -33,6 +33,13 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const sessionKey = await openf1.getLatestSessionKey(2026);
     const drivers = await openf1.getDrivers(sessionKey);
+    // Standings are a nice-to-have for ordering pickers — never fail the driver list over them.
+    const [teamStandings, driverStandings] = await Promise.all([
+      openf1.getTeamStandings(2026).catch(() => []),
+      openf1.getDriverStandings(2026).catch(() => []),
+    ]);
+    const teamRank = new Map(teamStandings.map(t => [t.team_name, t.position_current]));
+    const driverRank = new Map(driverStandings.map(d => [d.driver_number, d.position_current]));
 
     const seen = new Set();
     const unique = drivers
@@ -48,6 +55,8 @@ router.get('/', requireAuth, async (req, res) => {
         lastName: d.last_name,
         team: d.team_name,
         teamColor: d.team_colour ? '#' + d.team_colour : teamColor(d.team_name),
+        teamRank: teamRank.get(d.team_name) ?? null,
+        champRank: driverRank.get(d.driver_number) ?? null,
       }))
       .sort((a, b) => a.num - b.num);
 

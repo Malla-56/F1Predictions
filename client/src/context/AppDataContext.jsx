@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { api } from '../api';
 import { useAuth } from './AuthContext';
 
@@ -20,6 +20,17 @@ export function AppDataProvider({ children }) {
       .finally(() => setLoading(false));
   }, [user]);
 
+  // Constructors' championship order, teammates side by side (higher-placed driver first).
+  const driversByStanding = useMemo(() => {
+    const rank = r => r ?? Infinity;
+    return [...drivers].sort((a, b) =>
+      rank(a.teamRank) - rank(b.teamRank) ||
+      (a.team || '').localeCompare(b.team || '') ||
+      rank(a.champRank) - rank(b.champRank) ||
+      a.num - b.num
+    );
+  }, [drivers]);
+
   function driverById(id) {
     return drivers.find(d => d.id === id);
   }
@@ -30,7 +41,7 @@ export function AppDataProvider({ children }) {
   }
 
   return (
-    <AppDataContext.Provider value={{ races, drivers, loading, error, driverById, countryFlag }}>
+    <AppDataContext.Provider value={{ races, drivers, driversByStanding, loading, error, driverById, countryFlag }}>
       {children}
     </AppDataContext.Provider>
   );

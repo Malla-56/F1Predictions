@@ -113,3 +113,15 @@ CREATE TABLE IF NOT EXISTS tip_reminders_sent (
   sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, race_round, season, days_before)
 );
+
+-- Passkeys (Face ID / Touch ID / fingerprint sign-in), one row per device credential
+CREATE TABLE IF NOT EXISTS user_passkeys (
+  id            TEXT        PRIMARY KEY,           -- credential ID (base64url)
+  user_id       INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  public_key    TEXT        NOT NULL,              -- COSE public key (base64url)
+  counter       BIGINT      NOT NULL DEFAULT 0,
+  transports    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_used_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS user_passkeys_user_id_idx ON user_passkeys(user_id);

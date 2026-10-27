@@ -36,6 +36,10 @@ export const api = {
     login:    (username, password)                => request('POST', '/auth/login',    { username, password }),
     register: (username, password, display_name)  => request('POST', '/auth/register', { username, password, display_name }),
     me:       ()                                  => request('GET',  '/auth/me'),
+    passkeyRegisterOptions: ()                         => request('POST', '/auth/passkey/register-options'),
+    passkeyRegister:        (response, challengeToken) => request('POST', '/auth/passkey/register', { response, challengeToken }),
+    passkeyLoginOptions:    ()                         => request('POST', '/auth/passkey/login-options'),
+    passkeyLogin:           (response, challengeToken) => request('POST', '/auth/passkey/login', { response, challengeToken }),
   },
 
   races:   { list: () => request('GET', '/races') },

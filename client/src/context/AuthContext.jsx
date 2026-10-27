@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../api';
+import { signInWithPasskey } from '../passkey';
 
 const AuthContext = createContext(null);
 
@@ -23,6 +24,13 @@ export function AuthProvider({ children }) {
     return user;
   }
 
+  async function loginWithPasskey() {
+    const { token, user } = await signInWithPasskey();
+    localStorage.setItem('token', token);
+    setUser(user);
+    return user;
+  }
+
   async function register(username, password, display_name) {
     const { token, user } = await api.auth.register(username, password, display_name);
     localStorage.setItem('token', token);
@@ -36,7 +44,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithPasskey, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -109,7 +109,9 @@ export default function AdminResults({ setToast }) {
     setFetchingAll(true);
     try {
       const res = await api.admin.fetchAllResults();
-      setToast(res.fetched > 0 ? `Fetched ${res.fetched} round(s) from OpenF1 ✓` : 'No new results available yet');
+      const failed = (res.errors || []).map(e => e.round ? `R${e.round}: ${e.error}` : e.error).join(' · ');
+      if (res.fetched > 0) setToast(`Fetched ${res.fetched} round(s) from OpenF1 ✓${failed ? ` — failed: ${failed}` : ''}`);
+      else setToast(failed ? `No new results — ${failed}` : 'No new results available yet');
       const rows = await api.admin.results();
       setStoredResults(Object.fromEntries(rows.map(r => [r.race_round, r.result])));
     } catch (err) {

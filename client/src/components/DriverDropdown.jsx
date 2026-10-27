@@ -3,7 +3,7 @@ import { useAppData } from '../context/AppDataContext';
 import DriverChip from './DriverChip';
 
 export default function DriverDropdown({ value, onChange, exclude = [], placeholder = 'Select driver' }) {
-  const { drivers } = useAppData();
+  const { driversByStanding: drivers } = useAppData();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const ref = useRef(null);

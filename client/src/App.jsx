@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppDataProvider } from './context/AppDataContext';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
+import PasskeyPrompt from './components/PasskeyPrompt';
 import Toast from './components/Toast';
 import useIsMobile from './hooks/useIsMobile';
 
@@ -71,6 +72,7 @@ function AppShell() {
         <div className="app app-mobile">
           <MobileNav setToast={setToast} />
           <main className="main mobile-main">
+            <PasskeyPrompt setToast={setToast} />
             <Routes>
               <Route path="/tips" element={<MyTips />} />
               <Route path="/predict/:round" element={<TipEntry setToast={setToast} />} />
@@ -91,6 +93,7 @@ function AppShell() {
       <div className="app">
         <Sidebar />
         <main className="main">
+          <PasskeyPrompt setToast={setToast} />
           <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<Home setToast={setToast} theme={theme} setTheme={setTheme} />} />

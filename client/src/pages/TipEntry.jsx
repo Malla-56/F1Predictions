@@ -4,29 +4,23 @@ import { api } from '../api';
 import { useAppData } from '../context/AppDataContext';
 import Topbar from '../components/Topbar';
 import DriverChip from '../components/DriverChip';
-import DriverDropdown from '../components/DriverDropdown';
-import useIsMobile from '../hooks/useIsMobile';
+import DriverPicker from '../components/DriverPicker';
+import Icon from '../components/Icon';
 
-function DragRow({ position, driverId, onSwap, dragState, setDragState, onMove, isLast, isMobile }) {
-  const onDragStart = e => { setDragState({ from: position }); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(position)); };
-  const onDragOver  = e => { e.preventDefault(); setDragState(s => ({ ...s, over: position })); };
-  const onDrop      = e => { e.preventDefault(); const from = Number(e.dataTransfer.getData('text/plain')); if (from !== position) onSwap(from, position); setDragState({}); };
-  const onDragEnd   = () => setDragState({});
-
-  const cls = ['dragrow', dragState.from === position ? 'dragging' : '', dragState.over === position && dragState.from !== position ? 'over' : ''].filter(Boolean).join(' ');
-  const pill = position === 0 ? 'gold' : position < 3 ? 'silver' : '';
-
+function SlotRow({ label, tone, driverId, hint, locked, onOpen, onClear }) {
   return (
-    <div className={cls} draggable={!isMobile} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}>
-      <div className={`pos-pill${pill ? ' ' + pill : ''}`}>P{position + 1}</div>
-      {driverId ? <DriverChip driverId={driverId} showName /> : <span className="muted">empty slot</span>}
-      {isMobile && onMove ? (
-        <div className="reorder-btns">
-          <button type="button" className="reorder-btn" disabled={position === 0} onClick={() => onMove(position, position - 1)} aria-label="Move up">▲</button>
-          <button type="button" className="reorder-btn" disabled={isLast} onClick={() => onMove(position, position + 1)} aria-label="Move down">▼</button>
-        </div>
-      ) : (
-        <div className="grip">⋮⋮</div>
+    <div className={`slot-row${locked ? ' locked' : ''}${driverId ? ' filled' : ''}`}>
+      <button type="button" className="slot-main" onClick={onOpen} disabled={locked}>
+        <span className={`pos-pill${tone ? ' ' + tone : ''}`}>{label}</span>
+        <span className="slot-driver">
+          {driverId ? <DriverChip driverId={driverId} showName /> : <span className="slot-empty">Tap to pick</span>}
+        </span>
+        {hint && <span className="slot-hint">{hint}</span>}
+      </button>
+      {!locked && driverId && (
+        <button type="button" className="slot-clear" onClick={onClear} aria-label={`Clear ${label}`}>
+          <Icon name="close" size={14} />
+        </button>
       )}
     </div>
   );
@@ -37,13 +31,12 @@ export default function TipEntry({ setToast }) {
   const navigate = useNavigate();
   const { races, countryFlag } = useAppData();
   const race = races.find(r => r.round === parseInt(round));
-  const isMobile = useIsMobile();
 
   const [top10, setTop10] = useState(Array(10).fill(null));
   const [pole, setPole] = useState(null);
   const [dnf, setDnf] = useState(null);
   const [sprintWinner, setSprintWinner] = useState(null);
-  const [dragState, setDragState] = useState({});
+  const [activeSlot, setActiveSlot] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [scoringRules, setScoringRules] = useState([]);
@@ -61,26 +54,50 @@ export default function TipEntry({ setToast }) {
     api.admin.scoring().then(setScoringRules).catch(() => {});
   }, [round]);
 
-  function swap(from, to) {
-    setTop10(arr => {
-      const next = [...arr];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
+  const pts = (key, fallback) => scoringRules.find(r => r.rule_key === key)?.points ?? fallback;
+
+  // Every pick in the order the picker walks through them.
+  const slots = [
+    ...top10.map((_, i) => ({ key: i, label: `P${i + 1}`, title: `P${i + 1}`, subtitle: 'Race finish' })),
+    { key: 'pole', label: 'POLE', title: 'Pole position', subtitle: `+${pts('pole_correct', 2)} pts if correct` },
+    ...(race?.isSprint
+      ? [{ key: 'sprint', label: 'SPR', title: 'Sprint winner', subtitle: `+${pts('sprint_winner_correct', 2)} pts if correct` }]
+      : []),
+    { key: 'dnf', label: 'DNF', title: 'Did not finish', subtitle: `Most likely retirement · +${pts('dnf_correct', 1)} pts` },
+  ];
+
+  function valueOf(key, order = top10) {
+    if (typeof key === 'number') return order[key];
+    return { pole, dnf, sprint: sprintWinner }[key];
   }
 
-  function setSlot(i, driverId) {
-    setTop10(arr => {
-      const next = [...arr];
-      const existing = arr.indexOf(driverId);
-      if (existing > -1) next[existing] = arr[i];
-      next[i] = driverId;
-      return next;
-    });
+  // Picking a driver already placed elsewhere in the finishing order swaps the two positions.
+  function withDriverAt(order, i, driverId) {
+    const next = [...order];
+    const existing = driverId ? order.indexOf(driverId) : -1;
+    if (existing > -1) next[existing] = order[i];
+    next[i] = driverId;
+    return next;
   }
 
-  const valid = top10.every(Boolean) && pole && dnf && (race?.isSprint ? sprintWinner : true);
+  function assign(key, driverId) {
+    if (typeof key === 'number') setTop10(order => withDriverAt(order, key, driverId));
+    else ({ pole: setPole, dnf: setDnf, sprint: setSprintWinner })[key](driverId);
+  }
+
+  function pick(driverId) {
+    const key = activeSlot;
+    assign(key, driverId);
+    // Jump to the next empty slot after this one (wrapping), or close when everything is filled.
+    const order = typeof key === 'number' ? withDriverAt(top10, key, driverId) : top10;
+    const idx = slots.findIndex(s => s.key === key);
+    const after = [...slots.slice(idx + 1), ...slots.slice(0, idx)];
+    const nextEmpty = after.find(s => !valueOf(s.key, order));
+    setActiveSlot(nextEmpty ? nextEmpty.key : null);
+  }
+
+  const filledCount = slots.filter(s => valueOf(s.key)).length;
+  const valid = filledCount === slots.length;
   const isLocked = race?.isLocked;
 
   async function lockIn() {
@@ -145,6 +162,26 @@ export default function TipEntry({ setToast }) {
     );
   }
 
+  const active = activeSlot !== null ? slots.find(s => s.key === activeSlot) : null;
+  const activeIdx = active ? slots.indexOf(active) : -1;
+  // In the finishing order, show where other drivers already sit so a tap clearly means "swap".
+  const taken = typeof activeSlot === 'number'
+    ? Object.fromEntries(top10.map((id, i) => [id, i !== activeSlot && id ? `P${i + 1}` : null]).filter(([id, b]) => id && b))
+    : {};
+
+  const row = s => (
+    <SlotRow
+      key={s.key}
+      label={s.label}
+      tone={s.key === 0 ? 'gold' : s.key === 1 || s.key === 2 ? 'silver' : typeof s.key === 'string' ? 'bonus' : ''}
+      driverId={valueOf(s.key)}
+      hint={typeof s.key === 'string' ? s.subtitle : null}
+      locked={isLocked}
+      onOpen={() => setActiveSlot(s.key)}
+      onClear={() => assign(s.key, null)}
+    />
+  );
+
   return (
     <>
       <Topbar crumbs={crumbs} />
@@ -173,45 +210,30 @@ export default function TipEntry({ setToast }) {
           </div>
         )}
 
-        <div className="entry-grid">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div className="entry-card">
-              <div>
-                <h3>Pole Position</h3>
-                <div className="hint" style={{ marginTop: 6 }}>Single driver · +{scoringRules.find(r => r.rule_key === 'pole_correct')?.points ?? 2} pts if correct</div>
+        <div className="entry-simple">
+          {!isLocked && (
+            <div className="entry-progress">
+              <div className="entry-progress-txt">
+                <span>{valid ? 'All picks done — ready to submit' : 'Tap a position, then tap a driver'}</span>
+                <span className="mono">{filledCount}/{slots.length}</span>
               </div>
-              {isLocked
-                ? <DriverChip driverId={pole} showName />
-                : <DriverDropdown value={pole} onChange={setPole} placeholder="Select pole driver" />
-              }
+              <div className="entry-progress-bar"><span style={{ width: `${(filledCount / slots.length) * 100}%` }} /></div>
             </div>
+          )}
 
-            <div className="entry-card">
-              <div>
-                <h3>Did Not Finish</h3>
-                <div className="hint" style={{ marginTop: 6 }}>Pick the most likely retirement · +{scoringRules.find(r => r.rule_key === 'dnf_correct')?.points ?? 1} pts</div>
-              </div>
-              {isLocked
-                ? <DriverChip driverId={dnf} showName />
-                : <DriverDropdown value={dnf} onChange={setDnf} placeholder="Select DNF driver" />
-              }
-            </div>
+          <div className="entry-card">
+            <h3>Race finish · P1 → P10</h3>
+            <div className="slot-list">{slots.filter(s => typeof s.key === 'number').map(row)}</div>
+          </div>
 
-            {race?.isSprint && (
-              <div className="entry-card">
-                <div>
-                  <h3>Sprint Winner</h3>
-                  <div className="hint" style={{ marginTop: 6 }}>Sprint race winner · +{scoringRules.find(r => r.rule_key === 'sprint_winner_correct')?.points ?? 2} pts</div>
-                </div>
-                {isLocked
-                  ? <DriverChip driverId={sprintWinner} showName />
-                  : <DriverDropdown value={sprintWinner} onChange={setSprintWinner} placeholder="Select sprint winner" />
-                }
-              </div>
-            )}
+          <div className="entry-card">
+            <h3>Bonus picks</h3>
+            <div className="slot-list">{slots.filter(s => typeof s.key === 'string').map(row)}</div>
+          </div>
 
-            <div className="entry-card" style={{ background: 'var(--surface-2)', borderStyle: 'dashed' }}>
-              <h3>Scoring Guide</h3>
+          {scoringRules.length > 0 && (
+            <details className="entry-card entry-guide">
+              <summary><h3>Scoring guide</h3></summary>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px 14px' }} className="mono">
                 {scoringRules.map(r => (
                   <Fragment key={r.rule_key}>
@@ -220,51 +242,33 @@ export default function TipEntry({ setToast }) {
                   </Fragment>
                 ))}
               </div>
-            </div>
-          </div>
+            </details>
+          )}
 
-          <div className="entry-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3>Race Finish · P1 → P10</h3>
-              {!isLocked && (
-                <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.06em' }}>
-                  {isMobile ? 'Tap ▲▼ or pick a driver' : 'Drag rows to reorder'}
-                </span>
-              )}
+          {!isLocked && (
+            <div className="entry-submit-bar">
+              <button className="btn ghost" onClick={saveDraft}>Save draft</button>
+              <button className="btn primary" disabled={!valid} onClick={() => setShowConfirm(true)}>
+                {valid ? 'Submit tips →' : `${slots.length - filledCount} picks to go`}
+              </button>
             </div>
-
-            <div className="draglist">
-              {top10.map((id, i) => (
-                <div key={i} className={`draglist-item${!isLocked && !isMobile ? ' pair' : ''}`}>
-                  <DragRow
-                    position={i} driverId={id} onSwap={swap}
-                    dragState={dragState} setDragState={setDragState}
-                    isMobile={isMobile} isLast={i === top10.length - 1}
-                    onMove={!isLocked ? swap : null}
-                  />
-                  {!isLocked && (
-                    <DriverDropdown value={id} onChange={d => setSlot(i, d)} exclude={top10} />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {!isLocked && (
-              <div className="entry-submit-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
-                <div className="mono" style={{ fontSize: 11, color: valid ? 'var(--green)' : 'var(--text-3)', letterSpacing: '0.08em' }}>
-                  {valid ? '✓ ALL PICKS COMPLETE' : '✗ INCOMPLETE PICKS'}
-                </div>
-                <div className="entry-submit-actions" style={{ display: 'flex', gap: 10 }}>
-                  <button className="btn ghost" onClick={saveDraft}>Save draft</button>
-                  <button className="btn primary" disabled={!valid} onClick={() => setShowConfirm(true)}>
-                    Submit tips →
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
+
+      {active && !isLocked && (
+        <DriverPicker
+          title={active.title}
+          subtitle={active.subtitle}
+          value={valueOf(active.key)}
+          taken={taken}
+          onPick={pick}
+          onClear={() => assign(active.key, null)}
+          onClose={() => setActiveSlot(null)}
+          onPrev={activeIdx > 0 ? () => setActiveSlot(slots[activeIdx - 1].key) : null}
+          onNext={activeIdx < slots.length - 1 ? () => setActiveSlot(slots[activeIdx + 1].key) : null}
+        />
+      )}
 
       {showConfirm && (
         <div className="modal-bg" onClick={() => setShowConfirm(false)}>

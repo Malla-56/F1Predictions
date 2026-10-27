@@ -10,8 +10,8 @@ async function handleFetchResults(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
-    const fetched = await fetchPendingResults();
-    res.json({ ok: true, fetched });
+    const { fetched, errors } = await fetchPendingResults();
+    res.json({ ok: true, fetched, errors });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

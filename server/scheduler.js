@@ -32,11 +32,14 @@ async function fetchPendingResults() {
 
     const now = Date.now();
     let fetched = 0;
+    const errors = [];
 
     for (let i = 0; i < sorted.length; i++) {
       const round = i + 1;
       if (stored.has(round)) continue;
       if (new Date(sorted[i].date_start).getTime() > now) break;
+      // Skip (don't filter) cancelled meetings so stored round numbers stay aligned.
+      if (sorted[i].is_cancelled) continue;
 
       try {
         const result = await openf1.fetchAndBuildResult(round, SEASON);
@@ -45,14 +48,15 @@ async function fetchPendingResults() {
         fetched++;
       } catch (err) {
         console.warn(`[scheduler] R${round} not ready: ${err.message}`);
+        errors.push({ round, error: err.message });
       }
     }
 
     if (fetched === 0) console.log('[scheduler] nothing new to fetch');
-    return fetched;
+    return { fetched, errors };
   } catch (err) {
     console.error('[scheduler] error:', err.message);
-    return 0;
+    return { fetched: 0, errors: [{ round: null, error: err.message }] };
   }
 }
 
