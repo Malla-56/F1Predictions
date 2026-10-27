@@ -5,6 +5,20 @@ import Topbar from '../../components/Topbar';
 import Avatar from '../../components/Avatar';
 import Modal from '../../components/Modal';
 
+// "3h ago" for recent activity, a date after a week; the exact time is in the tooltip.
+function TimeAgo({ iso }) {
+  if (!iso) return <span style={{ color: 'var(--text-3)' }}>Never</span>;
+  const d = new Date(iso);
+  const mins = Math.round((Date.now() - d) / 60000);
+  const label =
+    mins < 2 ? 'Just now' :
+    mins < 60 ? `${mins}m ago` :
+    mins < 24 * 60 ? `${Math.round(mins / 60)}h ago` :
+    mins < 7 * 24 * 60 ? `${Math.round(mins / (24 * 60))}d ago` :
+    d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return <span title={d.toLocaleString('en-GB')}>{label}</span>;
+}
+
 export default function AdminUsers({ setToast }) {
   const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
@@ -101,6 +115,8 @@ export default function AdminUsers({ setToast }) {
                 <th>Role</th>
                 <th>Predictions</th>
                 <th>Joined</th>
+                <th title="Last password or Face ID sign-in">Last Login</th>
+                <th title="Last time they used the app (sessions stay signed in for 30 days)">Last Active</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -122,6 +138,8 @@ export default function AdminUsers({ setToast }) {
                   <td className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
                     {new Date(u.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                   </td>
+                  <td className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}><TimeAgo iso={u.last_login_at} /></td>
+                  <td className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}><TimeAgo iso={u.last_seen_at} /></td>
                   <td>
                     <span className={`badge dot ${u.is_active ? 'done' : 'pending'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
                   </td>

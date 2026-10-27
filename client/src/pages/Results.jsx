@@ -282,7 +282,9 @@ export default function Results({ setToast }) {
                   <span className="val" style={{ color: 'var(--red)' }}>
                     {totalPts}
                   </span>
-                  <span className="sub">league avg {leagueAvg}</span>
+                  <span className="sub">
+                    {breakdown.joker ? `joker ×${breakdown.joker} · ` : ''}league avg {leagueAvg}
+                  </span>
                 </div>
                 <div className="kpi-cell">
                   <span className="lbl">Exact Hits</span>

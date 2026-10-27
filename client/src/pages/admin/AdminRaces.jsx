@@ -17,7 +17,7 @@ function fmtLocal(iso) {
 }
 
 export default function AdminRaces({ setToast }) {
-  const { races, countryFlag } = useAppData();
+  const { races, reloadRaces, countryFlag } = useAppData();
   const [configs, setConfigs] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
@@ -51,6 +51,27 @@ export default function AdminRaces({ setToast }) {
       lockTime ? `Lock time updated for R${race.round}` : `R${race.round} lock time reset to default`);
   }
 
+  // Only one joker round per season — the server clears the previous one, so mirror that here.
+  async function setJoker(race) {
+    const on = configs[race.round]?.is_joker ? 0 : 1;
+    setSaving(race.round);
+    try {
+      await api.admin.saveRace(race.round, { is_joker: on });
+      setConfigs(prev => {
+        const next = {};
+        for (const [round, cfg] of Object.entries(prev)) next[round] = on ? { ...cfg, is_joker: 0 } : cfg;
+        next[race.round] = { ...prev[race.round], is_joker: on };
+        return next;
+      });
+      await reloadRaces();
+      setToast(on ? `R${race.round} is now the joker round (double points)` : `Joker removed from R${race.round}`);
+    } catch (err) {
+      setToast(`Error: ${err.message}`);
+    } finally {
+      setSaving(null);
+    }
+  }
+
   const toggle = (race, key, on, off) => {
     const next = configs[race.round]?.[key] ? 0 : 1;
     save(race, { [key]: next }, `R${race.round} ${next ? on : off}`);
@@ -82,6 +103,7 @@ export default function AdminRaces({ setToast }) {
                 <th>Lock Time Override</th>
                 <th>Sprint</th>
                 <th>Cancelled</th>
+                <th title="Every score for this round counts double. One round per season.">Joker ×2</th>
                 <th>Manual Lock</th>
               </tr>
             </thead>
@@ -143,6 +165,13 @@ export default function AdminRaces({ setToast }) {
                         <span className="mono" style={{ fontSize: 11 }}>
                           Cancelled{r.isCancelled && cfg.cancelled !== 1 ? ' (auto)' : ''}
                         </span>
+                      </label>
+                    </td>
+                    <td>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={cfg.is_joker === 1} disabled={busy || r.isCancelled}
+                          onChange={() => setJoker(r)} style={{ accentColor: 'var(--red)' }} />
+                        <span className="mono" style={{ fontSize: 11 }}>Joker</span>
                       </label>
                     </td>
                     <td>

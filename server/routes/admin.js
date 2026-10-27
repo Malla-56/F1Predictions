@@ -18,6 +18,7 @@ router.param('round', parseRound);
 router.get('/users', async (req, res) => {
   const { rows } = await pool.query(`
     SELECT u.id, u.username, u.display_name, u.role, u.is_active, u.created_at,
+           u.last_login_at, u.last_seen_at,
            COUNT(p.id)::int as prediction_count
     FROM users u
     LEFT JOIN predictions p ON p.user_id = u.id
@@ -106,7 +107,7 @@ router.get('/races', async (req, res) => {
   res.json(rows);
 });
 
-const RACE_FLAGS = ['manually_locked', 'is_sprint', 'cancelled'];
+const RACE_FLAGS = ['manually_locked', 'is_sprint', 'cancelled', 'is_joker'];
 
 // Partial update: only the fields present in the body change. lock_time: null clears
 // the override (back to the default lock at the start of the race weekend).
@@ -129,11 +130,30 @@ router.put('/races/:round', async (req, res) => {
 
   const placeholders = keys.map((_, i) => `$${i + 3}`).join(', ');
   const updates = keys.map(k => `${k} = EXCLUDED.${k}`).join(', ');
-  await pool.query(`
-    INSERT INTO race_config (race_round, season, ${keys.join(', ')})
-    VALUES ($1, $2, ${placeholders})
-    ON CONFLICT (race_round, season) DO UPDATE SET ${updates}
-  `, [req.round, SEASON, ...keys.map(k => fields[k])]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Only one joker round per season: choosing a new one clears the old one.
+    if (fields.is_joker === 1) {
+      await client.query(
+        'UPDATE race_config SET is_joker = 0 WHERE season = $1 AND race_round <> $2', [SEASON, req.round]
+      );
+    }
+    await client.query(`
+      INSERT INTO race_config (race_round, season, ${keys.join(', ')})
+      VALUES ($1, $2, ${placeholders})
+      ON CONFLICT (race_round, season) DO UPDATE SET ${updates}
+    `, [req.round, SEASON, ...keys.map(k => fields[k])]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  // Doubling (or un-doubling) applies to any round that already has a result.
+  if ('is_joker' in fields) await rescoreAll();
 
   res.json({ ok: true });
 });
@@ -169,16 +189,8 @@ router.put('/results/:round', async (req, res) => {
     sprintDnfs: sprintDnfs || []
   };
 
-  await pool.query(`
-    INSERT INTO race_results (race_round, season, result_json, source, updated_at)
-    VALUES ($1, $3, $2, 'manual', NOW())
-    ON CONFLICT (race_round, season) DO UPDATE SET
-      result_json = EXCLUDED.result_json,
-      source      = EXCLUDED.source,
-      updated_at  = EXCLUDED.updated_at
-  `, [round, JSON.stringify(result), SEASON]);
-
-  await scoreRound(round, SEASON, result);
+  const { saveAndScore } = require('../scheduler');
+  await saveAndScore(round, result, 'manual');
   res.json({ ok: true });
 });
 

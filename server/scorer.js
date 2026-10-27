@@ -11,7 +11,7 @@ function sprintWinnerOf(result) {
   return result.sprintWinner || result.sprintFinishOrder?.[0] || result.sprintPole || null;
 }
 
-function scorePrediction(pred, result, rules) {
+function scorePrediction(pred, result, rules, multiplier = 1) {
   if (!result || !result.finishOrder) return { points: 0, breakdown: {} };
 
   const breakdown = {};
@@ -60,10 +60,25 @@ function scorePrediction(pred, result, rules) {
     breakdown.sprint_winner_correct = pts;
   }
 
+  // Joker round: the breakdown keeps the per-rule values, only the total is multiplied.
+  if (multiplier !== 1) {
+    total *= multiplier;
+    breakdown.joker = multiplier;
+  }
+
   return { points: total, breakdown };
 }
+
+async function isJokerRound(round, season) {
+  const { rows: [cfg] } = await pool.query(
+    'SELECT is_joker FROM race_config WHERE race_round = $1 AND season = $2', [round, season]
+  );
+  return cfg?.is_joker === 1;
+}
+
 async function scoreRound(round, season, result) {
   const rules = await getScoringRules();
+  const multiplier = (await isJokerRound(round, season)) ? 2 : 1;
   const { rows: preds } = await pool.query(
     'SELECT * FROM predictions WHERE race_round = $1 AND season = $2',
     [round, season]
@@ -73,7 +88,7 @@ async function scoreRound(round, season, result) {
   try {
     await client.query('BEGIN');
     for (const pred of preds) {
-      const { points, breakdown } = scorePrediction(pred, result, rules);
+      const { points, breakdown } = scorePrediction(pred, result, rules, multiplier);
       await client.query(`
         INSERT INTO race_scores (user_id, race_round, season, points_total, breakdown, scored_at)
         VALUES ($1, $2, $3, $4, $5, NOW())

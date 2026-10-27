@@ -27,6 +27,9 @@ export function AppDataProvider({ children }) {
       .finally(() => setLoading(false));
   }, [user]);
 
+  // Re-read the calendar after an admin changes race settings (e.g. the joker round).
+  const reloadRaces = () => api.races.list().then(setRaces);
+
   // Constructors' championship order, teammates side by side (higher-placed driver first).
   const driversByStanding = useMemo(() => {
     const rank = r => r ?? Infinity;
@@ -51,7 +54,7 @@ export function AppDataProvider({ children }) {
   }
 
   return (
-    <AppDataContext.Provider value={{ races, drivers, driversByStanding, loading, error, driverById, countryFlag }}>
+    <AppDataContext.Provider value={{ races, reloadRaces, drivers, driversByStanding, loading, error, driverById, countryFlag }}>
       {children}
     </AppDataContext.Provider>
   );

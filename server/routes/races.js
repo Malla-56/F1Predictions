@@ -41,6 +41,7 @@ router.get('/', requireAuth, async (req, res) => {
         isLocked: r.isLocked,
         isSprint: r.isSprint,
         isCancelled: r.isCancelled,
+        isJoker: r.isJoker,
         hasResult,
         status,
       };

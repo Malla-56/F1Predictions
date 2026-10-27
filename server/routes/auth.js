@@ -20,6 +20,10 @@ function makeToken(user) {
   );
 }
 
+async function recordLogin(user) {
+  await pool.query('UPDATE users SET last_login_at = NOW(), last_seen_at = NOW() WHERE id = $1', [user.id]);
+}
+
 function userShape(user) {
   return { id: user.id, username: user.username, display_name: user.display_name, role: user.role };
 }
@@ -41,6 +45,7 @@ router.post('/register', async (req, res) => {
       'INSERT INTO users (username, password_hash, display_name) VALUES ($1, $2, $3) RETURNING *',
       [username.toLowerCase(), hash, display_name]
     );
+    await recordLogin(user);
     res.json({ token: makeToken(user), user: userShape(user) });
   } catch (err) {
     console.error('register error', err);
@@ -62,6 +67,7 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
+    await recordLogin(user);
     res.json({ token: makeToken(user), user: userShape(user) });
   } catch (err) {
     console.error('login error', err);
@@ -200,6 +206,7 @@ router.post('/passkey/login', async (req, res) => {
       'UPDATE user_passkeys SET counter = $1, last_used_at = NOW() WHERE id = $2',
       [authenticationInfo.newCounter, passkey.id]
     );
+    await recordLogin(user);
     res.json({ token: makeToken(user), user: userShape(user) });
   } catch (err) {
     passkeyError(res, err, 'Face ID sign-in failed');

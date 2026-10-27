@@ -6,7 +6,8 @@
     "dev:client": "cd client && npm run dev",
     "install:all": "npm install && cd client && npm install",
     "build": "cd client && npm run build",
-    "vercel-build": "cd client && npm install && npm run build",
+    "vercel-build": "node server/migrate.js && cd client && npm install && npm run build",
+    "migrate": "node server/migrate.js",
     "start": "node server/index.js"
   },
   "dependencies": {

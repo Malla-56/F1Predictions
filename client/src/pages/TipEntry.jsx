@@ -215,7 +215,10 @@ export default function TipEntry({ setToast }) {
               {race?.name || 'Loading…'}{' '}
               <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>· {race ? countryFlag(race.countryCode) : ''}</span>
             </h2>
-            <div className="page-sub">{race?.circuit}</div>
+            <div className="page-sub">
+              {race?.circuit}
+              {race?.isJoker && <> · <strong style={{ color: 'var(--red)' }}>Joker round: all points count double</strong></>}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <button className="btn ghost" onClick={() => navigate('/home')}>← Back</button>

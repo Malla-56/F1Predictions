@@ -7,21 +7,6 @@ const { SEASON } = require('./config');
 // so OpenF1 adding or dropping a meeting mid-season shifted every later round onto
 // the wrong race (predictions and results are stored by round).
 
-let tableReady = false;
-async function ensureTable() {
-  if (tableReady) return;
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS race_rounds (
-      season      INTEGER NOT NULL,
-      round       INTEGER NOT NULL,
-      meeting_key INTEGER NOT NULL,
-      PRIMARY KEY (season, round),
-      UNIQUE (season, meeting_key)
-    )
-  `);
-  tableReady = true;
-}
-
 const roundCache = new Map(); // season → Map(meeting_key → round)
 
 function isGrandPrix(m) {
@@ -38,7 +23,6 @@ async function roundsFor(meetings, season) {
   const cached = roundCache.get(season);
   if (cached && meetings.every(m => cached.has(m.meeting_key))) return cached;
 
-  await ensureTable();
   let map = await loadRounds(season);
 
   if (map.size === 0) {
@@ -108,6 +92,7 @@ async function getCalendar(season = SEASON) {
         isLocked: cfg.manually_locked === 1 || now >= lockTime,
         isSprint: own.some(s => s.session_name === 'Sprint') || cfg.is_sprint === 1,
         isCancelled: cfg.cancelled === 1 || !!m.is_cancelled,
+        isJoker: cfg.is_joker === 1,
       };
     });
 }
