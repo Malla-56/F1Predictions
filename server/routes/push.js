@@ -36,27 +36,12 @@ router.post('/unsubscribe', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-const TEST_MESSAGES = [
-  'Box, box! This is only a test.',
-  'Lights out and away we go — your notifications work.',
-  'Gap to the car ahead: 0.000s. Test received.',
-  'Tyres are warm, notifications are working.',
-  'Radio check: loud and clear.',
-  'DRS enabled. Test notification delivered.',
-  'Purple sector! Push notifications are go.',
-  "It's hammer time — this is just a test.",
-  'Safety car deployed… just kidding, only a test.',
-  'Copy that, we are checking. Notifications OK.',
-];
-
+// Confirmation sent when a device turns notifications on.
 router.post('/test', requireAuth, async (req, res) => {
   try {
-    const body = req.body?.random
-      ? TEST_MESSAGES[Math.floor(Math.random() * TEST_MESSAGES.length)]
-      : "Notifications are on — we'll remind you before tips close.";
     const delivered = await sendToUser(req.user.id, {
       title: 'Pitlane Picks',
-      body,
+      body: "Notifications are on — we'll remind you before tips close and send your score after each race.",
       url: '/home',
     });
     res.json({ ok: true, delivered });

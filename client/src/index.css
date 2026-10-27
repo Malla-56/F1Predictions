@@ -758,18 +758,18 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* Passkey enrolment banner (shown once after sign-in on capable devices) */
-.passkey-banner {
+.prompt-banner {
   display: flex; align-items: center; gap: 12px;
   margin: 16px var(--gutter) 0; padding: 12px 14px;
   background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--red); border-radius: 4px;
 }
-.passkey-banner .ico { color: var(--red-2); flex-shrink: 0; display: flex; }
-.passkey-banner .txt { flex: 1; min-width: 0; font-size: 13px; }
-.passkey-banner .txt strong { display: block; font-family: var(--display); font-size: 14px; }
-.passkey-banner .txt span { color: var(--text-2); }
-.passkey-banner .acts { display: flex; gap: 6px; align-items: center; }
-.passkey-banner .x { background: none; border: 0; color: var(--text-3); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.app-mobile .passkey-banner { margin: 12px 14px 0; flex-wrap: wrap; }
+.prompt-banner .ico { color: var(--red-2); flex-shrink: 0; display: flex; }
+.prompt-banner .txt { flex: 1; min-width: 0; font-size: 13px; }
+.prompt-banner .txt strong { display: block; font-family: var(--display); font-size: 14px; }
+.prompt-banner .txt span { color: var(--text-2); }
+.prompt-banner .acts { display: flex; gap: 6px; align-items: center; }
+.prompt-banner .x { background: none; border: 0; color: var(--text-3); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.app-mobile .prompt-banner { margin: 12px 14px 0; flex-wrap: wrap; }
 
 /* Modal */
 .modal-bg {
@@ -1011,7 +1011,7 @@ a { color: inherit; text-decoration: none; }
 
 /* Mobile tap targets */
 @media (max-width: 768px) {
-  .icon-btn, .mobile-logout, .arrow-btn, .passkey-banner .x { min-width: 44px; min-height: 44px; }
+  .icon-btn, .mobile-logout, .arrow-btn, .prompt-banner .x { min-width: 44px; min-height: 44px; }
 }
 
 /* Results Page */

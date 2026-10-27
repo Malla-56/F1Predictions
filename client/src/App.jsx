@@ -5,6 +5,7 @@ import { AppDataProvider } from './context/AppDataContext';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
 import PasskeyPrompt from './components/PasskeyPrompt';
+import NotifyPrompt from './components/NotifyPrompt';
 import Toast from './components/Toast';
 import useIsMobile from './hooks/useIsMobile';
 
@@ -73,6 +74,7 @@ function AppShell() {
           <MobileNav setToast={setToast} />
           <main className="main mobile-main">
             <PasskeyPrompt setToast={setToast} />
+            <NotifyPrompt setToast={setToast} />
             <Routes>
               <Route path="/tips" element={<MyTips />} />
               <Route path="/predict/:round" element={<TipEntry setToast={setToast} />} />
@@ -94,6 +96,7 @@ function AppShell() {
         <Sidebar />
         <main className="main">
           <PasskeyPrompt setToast={setToast} />
+          <NotifyPrompt setToast={setToast} />
           <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<Home setToast={setToast} theme={theme} setTheme={setTheme} />} />

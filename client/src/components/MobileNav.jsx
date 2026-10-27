@@ -1,6 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from './Icon';
-import NotifyButton from './NotifyButton';
 import { useAuth } from '../context/AuthContext';
 
 const MOBILE_NAV = [
@@ -26,7 +25,6 @@ export default function MobileNav({ setToast }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <NotifyButton setToast={setToast} />
           <button className="mobile-logout" onClick={logout} aria-label="Sign out">
             <Icon name="logout" size={18} />
           </button>

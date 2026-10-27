@@ -38,7 +38,7 @@ export default function PasskeyPrompt({ setToast }) {
   }
 
   return (
-    <div className="passkey-banner">
+    <div className="prompt-banner">
       <span className="ico"><Icon name="faceid" size={26} /></span>
       <div className="txt">
         <strong>Sign in with {bio}</strong>

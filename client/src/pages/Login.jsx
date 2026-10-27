@@ -19,7 +19,8 @@ export default function Login() {
   useEffect(() => { passkeySupported().then(setCanPasskey); }, []);
 
   const bio = biometricLabel();
-  // Lead with the biometric button once this device is known to have a passkey.
+  // Only offer biometric sign-in once a passkey has been set up on this device
+  // (via the banner after a password sign-in), and then lead with it.
   const passkeyFirst = canPasskey && hasAnyPasskey() && mode === 'signin';
 
   function switchMode(next) {
@@ -135,8 +136,6 @@ export default function Login() {
             {loading ? 'Signing in…' : mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>
         </form>
-
-        {canPasskey && mode === 'signin' && !passkeyFirst && passkeyButton}
 
         <div className="login-switch">
           {mode === 'signin' ? (

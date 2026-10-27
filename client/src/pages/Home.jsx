@@ -9,7 +9,6 @@ import Avatar from '../components/Avatar';
 import DriverChip from '../components/DriverChip';
 import Icon from '../components/Icon';
 import PollWidget from '../components/PollWidget';
-import NotifyButton from '../components/NotifyButton';
 import Modal from '../components/Modal';
 import { onActivate } from '../components/useDialog';
 
@@ -45,7 +44,6 @@ export default function Home({ setToast, theme, setTheme }) {
     <>
       {upcoming && <span className="badge dot locked">R{upcoming.round} · {current ? 'Race Day' : upcoming.isLocked ? 'Locked' : 'Open'}</span>}
       {upcoming?.isJoker && <span className="badge" style={{ background: 'var(--red)', color: '#fff' }} title="All points count double this round">Joker ×2</span>}
-      <NotifyButton setToast={setToast} />
       <button className="icon-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme" aria-label="Toggle theme">
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
       </button>
