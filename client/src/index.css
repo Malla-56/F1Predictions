@@ -771,6 +771,31 @@ a { color: inherit; text-decoration: none; }
 .prompt-banner .x { background: none; border: 0; color: var(--text-3); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .app-mobile .prompt-banner { margin: 12px 14px 0; flex-wrap: wrap; }
 
+/* Install sheet (mobile web → home screen app) */
+.install-bg {
+  position: fixed; inset: 0; z-index: 150; background: rgba(0,0,0,0.55);
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fadein 0.16s ease-out;
+}
+.install-sheet {
+  width: 100%; max-width: 520px; background: var(--surface);
+  border: 1px solid var(--line); border-bottom: 0; border-radius: 14px 14px 0 0;
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  animation: sheetin 0.26s cubic-bezier(.2,.7,.3,1);
+}
+@keyframes sheetin { from { transform: translateY(100%); } to { transform: none; } }
+.install-grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 16px; }
+.install-head { display: flex; gap: 14px; align-items: flex-start; }
+.install-head img { border-radius: 11px; flex-shrink: 0; }
+.install-head h3 { font-family: var(--display); font-size: 18px; font-weight: 700; margin: 2px 0 4px; }
+.install-head p { margin: 0; color: var(--text-2); font-size: 13px; }
+.install-head .x { margin-left: auto; background: none; border: 0; color: var(--text-3); width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; margin-top: -8px; margin-right: -10px; }
+.install-steps { margin: 18px 0 4px; padding-left: 22px; display: grid; gap: 10px; font-size: 14px; }
+.install-steps li::marker { color: var(--red); font-family: var(--mono); }
+.install-btn { width: 100%; height: 46px; margin-top: 18px; justify-content: center; }
+.install-later { width: 100%; height: 42px; margin-top: 8px; justify-content: center; }
+@media (prefers-reduced-motion: reduce) { .install-bg, .install-sheet { animation: none; } }
+
 /* Modal */
 .modal-bg {
   position: fixed; inset: 0; background: rgba(0,0,0,0.7);

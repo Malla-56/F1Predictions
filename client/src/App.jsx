@@ -7,6 +7,7 @@ import MobileNav from './components/MobileNav';
 import PasskeyPrompt from './components/PasskeyPrompt';
 import NotifyPrompt from './components/NotifyPrompt';
 import Toast from './components/Toast';
+import InstallSheet from './components/InstallSheet';
 import useIsMobile from './hooks/useIsMobile';
 
 import Login from './pages/Login';
@@ -129,6 +130,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppShell />
+        <InstallSheet />
       </AuthProvider>
     </BrowserRouter>
   );
