@@ -1,18 +1,25 @@
 const express = require('express');
 const pool = require('../db');
 const requireAuth = require('../middleware/auth');
+const parseRound = require('../middleware/round');
+const { SEASON } = require('../config');
 
 const router = express.Router();
+router.param('round', parseRound);
+
+// Point values for each rule — readable by everyone so tip entry shows the real values
+router.get('/rules', requireAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT rule_key, points, description FROM scoring_rules ORDER BY id');
+  res.json(rows);
+});
 
 // Scores for a specific round — returns per-user points + breakdown
 router.get('/round/:round', requireAuth, async (req, res) => {
-  const round = parseInt(req.params.round);
-  const season = parseInt(req.query.season || 2026);
-
-  const { rows } = await pool.query(
-    'SELECT rs.*, u.display_name FROM race_scores rs JOIN users u ON rs.user_id = u.id WHERE rs.race_round = $1 AND rs.season = $2',
-    [round, season]
-  );
+  const { rows } = await pool.query(`
+    SELECT rs.*, u.display_name
+    FROM race_scores rs JOIN users u ON rs.user_id = u.id
+    WHERE rs.race_round = $1 AND rs.season = $2 AND u.is_active = 1
+  `, [req.round, SEASON]);
 
   const avg = rows.length > 0
     ? Math.round(rows.reduce((sum, r) => sum + r.points_total, 0) / rows.length)
@@ -30,10 +37,8 @@ router.get('/round/:round', requireAuth, async (req, res) => {
 });
 
 router.get('/', requireAuth, async (req, res) => {
-  const season = parseInt(req.query.season || 2026);
-
   const { rows: users } = await pool.query('SELECT id, display_name FROM users WHERE is_active = 1');
-  const { rows: scores } = await pool.query('SELECT * FROM race_scores WHERE season = $1', [season]);
+  const { rows: scores } = await pool.query('SELECT * FROM race_scores WHERE season = $1', [SEASON]);
 
   const scoresBy = {};
   for (const s of scores) {
@@ -51,8 +56,9 @@ router.get('/', requireAuth, async (req, res) => {
     return { userId: u.id, displayName: u.display_name, total, played, perRace, isMe: u.id === req.user.id };
   });
 
-  rows.sort((a, b) => b.total - a.total);
-  rows.forEach((r, i) => { r.rank = i + 1; });
+  // Competition ranking: equal totals share a rank (1, 1, 3).
+  rows.sort((a, b) => b.total - a.total || a.displayName.localeCompare(b.displayName));
+  rows.forEach((r, i) => { r.rank = i > 0 && r.total === rows[i - 1].total ? rows[i - 1].rank : i + 1; });
 
   res.json(rows);
 });

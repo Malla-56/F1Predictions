@@ -4,10 +4,14 @@ const pool = require('../db');
 const openf1 = require('../openf1');
 const requireAuth = require('../middleware/auth');
 const requireAdmin = require('../middleware/requireAdmin');
-const { scoreRound } = require('../scorer');
+const parseRound = require('../middleware/round');
+const { getRace } = require('../calendar');
+const { scoreRound, rescoreAll } = require('../scorer');
+const { SEASON } = require('../config');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
+router.param('round', parseRound);
 
 // ── Users ──────────────────────────────────────────────────────────────────
 
@@ -26,8 +30,13 @@ router.get('/users', async (req, res) => {
 router.put('/users/:id', async (req, res) => {
   const { role, is_active, display_name, password } = req.body;
 
+  const isSelf = parseInt(req.params.id) === req.user.id;
+  if (isSelf && ((role !== undefined && role !== 'admin') || (is_active !== undefined && !is_active))) {
+    return res.status(400).json({ error: "You can't deactivate or demote your own account" });
+  }
+
   if (password !== undefined) {
-    if (parseInt(req.params.id) === req.user.id) {
+    if (isSelf) {
       return res.status(400).json({ error: 'Cannot reset your own password this way' });
     }
     if (typeof password !== 'string' || password.length < 8) {
@@ -53,10 +62,10 @@ router.put('/users/:id', async (req, res) => {
 });
 
 router.delete('/users/:id/predictions/:round', async (req, res) => {
-  await pool.query(
-    'DELETE FROM predictions WHERE user_id = $1 AND race_round = $2 AND season = 2026',
-    [req.params.id, req.params.round]
-  );
+  const params = [req.params.id, req.round, SEASON];
+  // Remove the score too, otherwise the deleted tip keeps counting on the leaderboard.
+  await pool.query('DELETE FROM race_scores WHERE user_id = $1 AND race_round = $2 AND season = $3', params);
+  await pool.query('DELETE FROM predictions WHERE user_id = $1 AND race_round = $2 AND season = $3', params);
   res.json({ ok: true });
 });
 
@@ -69,6 +78,9 @@ router.get('/scoring', async (req, res) => {
 
 router.put('/scoring', async (req, res) => {
   const rules = req.body;
+  if (!Array.isArray(rules) || !rules.every(r => Number.isInteger(r.points) && r.points >= 0)) {
+    return res.status(400).json({ error: 'Points must be whole numbers of 0 or more' });
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -76,36 +88,52 @@ router.put('/scoring', async (req, res) => {
       await client.query('UPDATE scoring_rules SET points = $1 WHERE id = $2', [r.points, r.id]);
     }
     await client.query('COMMIT');
-    res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
+  // Apply the new values to every round that already has a result.
+  await rescoreAll();
+  res.json({ ok: true });
 });
 
 // ── Race Config ────────────────────────────────────────────────────────────
 
 router.get('/races', async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM race_config WHERE season = 2026 ORDER BY race_round');
+  const { rows } = await pool.query('SELECT * FROM race_config WHERE season = $1 ORDER BY race_round', [SEASON]);
   res.json(rows);
 });
 
-router.put('/races/:round', async (req, res) => {
-  const round = parseInt(req.params.round);
-  const { lock_time, manually_locked, is_sprint, cancelled, notes } = req.body;
+const RACE_FLAGS = ['manually_locked', 'is_sprint', 'cancelled'];
 
+// Partial update: only the fields present in the body change. lock_time: null clears
+// the override (back to the default lock at the start of the race weekend).
+router.put('/races/:round', async (req, res) => {
+  const body = req.body || {};
+  const fields = {};
+  for (const key of RACE_FLAGS) {
+    if (key in body) fields[key] = body[key] ? 1 : 0;
+  }
+  if ('lock_time' in body) {
+    if (body.lock_time !== null && isNaN(new Date(body.lock_time))) {
+      return res.status(400).json({ error: 'Invalid lock time' });
+    }
+    fields.lock_time = body.lock_time === null ? null : new Date(body.lock_time).toISOString();
+  }
+  if ('notes' in body) fields.notes = body.notes ?? null;
+
+  const keys = Object.keys(fields);
+  if (!keys.length) return res.status(400).json({ error: 'Nothing to update' });
+
+  const placeholders = keys.map((_, i) => `$${i + 3}`).join(', ');
+  const updates = keys.map(k => `${k} = EXCLUDED.${k}`).join(', ');
   await pool.query(`
-    INSERT INTO race_config (race_round, season, lock_time, manually_locked, is_sprint, cancelled, notes)
-    VALUES ($1, 2026, $2, $3, $4, $5, $6)
-    ON CONFLICT (race_round, season) DO UPDATE SET
-      lock_time       = COALESCE(EXCLUDED.lock_time, race_config.lock_time),
-      manually_locked = COALESCE(EXCLUDED.manually_locked, race_config.manually_locked),
-      is_sprint       = COALESCE(EXCLUDED.is_sprint, race_config.is_sprint),
-      cancelled       = COALESCE(EXCLUDED.cancelled, race_config.cancelled),
-      notes           = COALESCE(EXCLUDED.notes, race_config.notes)
-  `, [round, lock_time ?? null, manually_locked ?? 0, is_sprint ?? 0, cancelled ?? 0, notes ?? null]);
+    INSERT INTO race_config (race_round, season, ${keys.join(', ')})
+    VALUES ($1, $2, ${placeholders})
+    ON CONFLICT (race_round, season) DO UPDATE SET ${updates}
+  `, [req.round, SEASON, ...keys.map(k => fields[k])]);
 
   res.json({ ok: true });
 });
@@ -113,32 +141,44 @@ router.put('/races/:round', async (req, res) => {
 // ── Results ────────────────────────────────────────────────────────────────
 
 router.get('/results', async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM race_results WHERE season = 2026 ORDER BY race_round');
-  res.json(rows.map(r => ({ ...r, result: JSON.parse(r.result_json) })));
+  const { rows } = await pool.query('SELECT * FROM race_results WHERE season = $1 ORDER BY race_round', [SEASON]);
+  res.json(rows.map(r => {
+    const result = JSON.parse(r.result_json);
+    // Older stored results called the sprint winner "sprintPole".
+    if (!result.sprintWinner) result.sprintWinner = result.sprintFinishOrder?.[0] || result.sprintPole || null;
+    return { ...r, result };
+  }));
 });
 
 router.put('/results/:round', async (req, res) => {
-  const round = parseInt(req.params.round);
-  const { finishOrder, pole, dnfs, sprintPole, sprintFinishOrder, sprintDnfs } = req.body;
+  const round = req.round;
+  const { finishOrder, pole, dnfs, sprintWinner, sprintFinishOrder, sprintDnfs } = req.body;
+  if (!Array.isArray(finishOrder) || !finishOrder.some(Boolean)) {
+    return res.status(400).json({ error: 'finishOrder must list at least one driver' });
+  }
+  const placed = finishOrder.filter(Boolean);
+  if (new Set(placed).size !== placed.length) {
+    return res.status(400).json({ error: 'A driver appears more than once in the finishing order' });
+  }
   const result = {
     finishOrder,
-    pole,
+    pole: pole || null,
     dnfs: dnfs || [],
-    sprintPole: sprintPole || null,
+    sprintWinner: sprintWinner || sprintFinishOrder?.[0] || null,
     sprintFinishOrder: sprintFinishOrder || [],
     sprintDnfs: sprintDnfs || []
   };
 
   await pool.query(`
     INSERT INTO race_results (race_round, season, result_json, source, updated_at)
-    VALUES ($1, 2026, $2, 'manual', NOW())
+    VALUES ($1, $3, $2, 'manual', NOW())
     ON CONFLICT (race_round, season) DO UPDATE SET
       result_json = EXCLUDED.result_json,
       source      = EXCLUDED.source,
       updated_at  = EXCLUDED.updated_at
-  `, [round, JSON.stringify(result)]);
+  `, [round, JSON.stringify(result), SEASON]);
 
-  await scoreRound(round, 2026, result);
+  await scoreRound(round, SEASON, result);
   res.json({ ok: true });
 });
 
@@ -155,10 +195,13 @@ router.post('/results/fetch-all', async (req, res) => {
 
 // Fetch a single round's result from OpenF1, save, and score
 router.post('/results/:round/fetch', async (req, res) => {
-  const round = parseInt(req.params.round);
+  const round = req.round;
   const { saveAndScore } = require('../scheduler');
   try {
-    const result = await openf1.fetchAndBuildResult(round, 2026);
+    const race = await getRace(round, SEASON);
+    if (!race) throw new Error(`Round ${round} not found in calendar`);
+    if (race.raceEnd > new Date()) throw new Error(`Round ${round} hasn't finished yet`);
+    const result = await openf1.buildResult(race);
     await saveAndScore(round, result);
     res.json({ ok: true, result });
   } catch (err) {
@@ -167,13 +210,13 @@ router.post('/results/:round/fetch', async (req, res) => {
 });
 
 router.post('/results/:round/rescore', async (req, res) => {
-  const round = parseInt(req.params.round);
+  const round = req.round;
   const { rows: [row] } = await pool.query(
-    'SELECT * FROM race_results WHERE race_round = $1 AND season = 2026',
-    [round]
+    'SELECT * FROM race_results WHERE race_round = $1 AND season = $2',
+    [round, SEASON]
   );
   if (!row) return res.status(404).json({ error: 'No result stored for this round' });
-  await scoreRound(round, 2026, JSON.parse(row.result_json));
+  await scoreRound(round, SEASON, JSON.parse(row.result_json));
   res.json({ ok: true });
 });
 
@@ -191,7 +234,7 @@ router.post('/import', async (req, res) => {
     await client.query('BEGIN');
 
     for (const rec of records) {
-      const { round, season = 2026, predictions } = rec;
+      const { round, season = SEASON, predictions } = rec;
       if (!round) throw new Error('Each record must have a round');
       if (!Array.isArray(predictions)) throw new Error(`Round ${round}: predictions must be an array`);
 
@@ -265,9 +308,9 @@ router.get('/export', async (req, res) => {
     JOIN users u ON u.id = p.user_id
     LEFT JOIN race_scores s
       ON s.user_id = p.user_id AND s.race_round = p.race_round AND s.season = p.season
-    WHERE p.season = 2026
+    WHERE p.season = $1
     ORDER BY p.race_round, u.username
-  `);
+  `, [SEASON]);
   res.json(rows);
 });
 
@@ -285,7 +328,7 @@ router.post('/scores/override', async (req, res) => {
 
     for (const rec of records) {
       const round  = parseInt(rec.round);
-      const season = parseInt(rec.season || 2026);
+      const season = parseInt(rec.season || SEASON);
       const points = parseInt(rec.points);
       if (!round || isNaN(round)) throw new Error(`Invalid round: ${rec.round}`);
       if (isNaN(points)) throw new Error(`Round ${round}: invalid points for "${rec.username}"`);
@@ -325,8 +368,8 @@ router.post('/scores/override', async (req, res) => {
 router.get('/overview', async (req, res) => {
   const [r1, r2, r3] = await Promise.all([
     pool.query('SELECT COUNT(*)::int as c FROM users WHERE is_active = 1'),
-    pool.query('SELECT COUNT(*)::int as c FROM predictions'),
-    pool.query('SELECT COUNT(DISTINCT race_round)::int as c FROM race_scores WHERE season = 2026'),
+    pool.query('SELECT COUNT(*)::int as c FROM predictions WHERE season = $1', [SEASON]),
+    pool.query('SELECT COUNT(DISTINCT race_round)::int as c FROM race_scores WHERE season = $1', [SEASON]),
   ]);
   res.json({
     userCount:    r1.rows[0].c,

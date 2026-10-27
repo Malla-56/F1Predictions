@@ -48,7 +48,7 @@ export default function PollWidget() {
   }
 
   return (
-    <div className="card" style={{ padding: '20px 22px', marginBottom: 24 }}>
+    <div className="card poll-card" style={{ padding: '20px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.1em' }}>COMMUNITY POLL</div>
         <span className="badge">{totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}</span>
@@ -79,9 +79,16 @@ export default function PollWidget() {
             const pct = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
             const isChosen = opt.id === user_vote;
             return (
-              <div key={opt.id} style={{ cursor: voting ? 'default' : 'pointer' }} onClick={() => !voting && vote(opt.id)}>
+              <button
+                key={opt.id}
+                type="button"
+                className="btn-reset"
+                style={{ display: 'block', width: '100%', textAlign: 'left', cursor: voting ? 'default' : 'pointer' }}
+                onClick={() => !voting && vote(opt.id)}
+                aria-pressed={isChosen}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 13, fontWeight: isChosen ? 600 : 400, color: isChosen ? 'var(--red)' : 'var(--text-1)' }}>
+                  <span style={{ fontSize: 13, fontWeight: isChosen ? 600 : 400, color: isChosen ? 'var(--red)' : 'var(--text)' }}>
                     {isChosen ? '✓ ' : ''}{opt.label}
                   </span>
                   <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>{pct}%</span>
@@ -95,7 +102,7 @@ export default function PollWidget() {
                     transition: 'width 0.3s ease',
                   }} />
                 </div>
-              </div>
+              </button>
             );
           })}
           <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>

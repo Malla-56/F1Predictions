@@ -6,11 +6,13 @@ import { useAppData } from '../context/AppDataContext';
 import Topbar from '../components/Topbar';
 import ResultsTable from '../components/ResultsTable';
 import SpecialPair from '../components/SpecialPair';
+import { onActivate } from '../components/useDialog';
 
 export default function Results({ setToast }) {
   const { user } = useAuth();
   const { races, countryFlag, loading: racesLoading } = useAppData();
   const navigate = useNavigate();
+  const { driverById } = useAppData();
 
   const [roundId, setRoundId] = useState(null);
   const [showRoundMenu, setShowRoundMenu] = useState(false);
@@ -35,17 +37,21 @@ export default function Results({ setToast }) {
   useEffect(() => {
     if (!roundId) return;
 
+    // Ignore responses for a round the user has already navigated away from.
+    let stale = false;
     setLoading(true);
     setError(null);
+    setResults(undefined);
     setAllPredictions(undefined);
     setRoundScores(null);
 
     Promise.all([
-      api.results.get(roundId).catch(() => null),
-      api.get(`/predictions/${roundId}`).catch(() => null),
+      api.results.get(roundId),
+      api.predictions.list(roundId).catch(() => null),
       api.scores.round(roundId).catch(() => null),
     ])
       .then(([res, preds, scores]) => {
+        if (stale) return;
         setResults(res);
         setAllPredictions(preds || []);
         setRoundScores(scores);
@@ -61,8 +67,9 @@ export default function Results({ setToast }) {
           setSelectedUserId(defaultUid);
         }
       })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+      .catch(e => { if (!stale) setError(e.message); })
+      .finally(() => { if (!stale) setLoading(false); });
+    return () => { stale = true; };
   }, [roundId, user?.id]);
 
   // ALL hooks must be before any early returns
@@ -104,7 +111,11 @@ export default function Results({ setToast }) {
     return (
       <>
         <Topbar crumbs={['Pulse League', 'Results']} />
-        <div className="content"><div className="loading">Loading race data…</div></div>
+        <div className="content">
+          {!racesLoading && completed.length === 0
+            ? <div className="results-empty">No results yet — check back after the first race.</div>
+            : <div className="loading">Loading race data…</div>}
+        </div>
       </>
     );
   }
@@ -131,7 +142,7 @@ export default function Results({ setToast }) {
 
   const topbarRight = (
     <>
-      <span className="badge dot" style={{ color: 'var(--red-2)', borderColor: 'rgba(225,6,0,.4)', background: 'var(--red-dim)' }}>
+      <span className="badge dot" style={{ color: 'var(--red-2)', borderColor: 'var(--red-line)', background: 'var(--red-dim)' }}>
         R{String(race.round).padStart(2, '0')} · Results
       </span>
     </>
@@ -160,15 +171,21 @@ export default function Results({ setToast }) {
           <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div className="round-selector-wrap">
               <div className="round-selector">
-                <button className="arrow-btn" disabled={!canPrev} onClick={() => canPrev && setRoundId(completed[idx - 1].round)}>
+                <button className="arrow-btn" aria-label="Previous round" disabled={!canPrev} onClick={() => canPrev && setRoundId(completed[idx - 1].round)}>
                   ‹
                 </button>
-                <div className="pill" onClick={() => setShowRoundMenu(o => !o)}>
+                <button
+                  type="button"
+                  className="pill"
+                  onClick={() => setShowRoundMenu(o => !o)}
+                  aria-haspopup="true"
+                  aria-expanded={showRoundMenu}
+                >
                   <span className="r">R{String(race.round).padStart(2, '0')}</span>
                   <span>{race.name}</span>
                   <span className="chev">▾</span>
-                </div>
-                <button className="arrow-btn" disabled={!canNext} onClick={() => canNext && setRoundId(completed[idx + 1].round)}>
+                </button>
+                <button className="arrow-btn" aria-label="Next round" disabled={!canNext} onClick={() => canNext && setRoundId(completed[idx + 1].round)}>
                   ›
                 </button>
               </div>
@@ -178,16 +195,22 @@ export default function Results({ setToast }) {
                   <div className="round-menu">
                     {races.map(r => {
                       const isActive = r.round === roundId;
+                      const choose = () => {
+                        if (r.status === 'done') {
+                          setRoundId(r.round);
+                          setShowRoundMenu(false);
+                        }
+                      };
                       return (
                         <div
                           key={r.round}
                           className={'item ' + (isActive ? 'active' : '') + (r.status !== 'done' ? ' disabled' : '')}
-                          onClick={() => {
-                            if (r.status === 'done') {
-                              setRoundId(r.round);
-                              setShowRoundMenu(false);
-                            }
-                          }}
+                          onClick={choose}
+                          role="button"
+                          tabIndex={r.status === 'done' ? 0 : -1}
+                          aria-disabled={r.status !== 'done'}
+                          aria-current={isActive || undefined}
+                          onKeyDown={onActivate(choose)}
                           style={r.status !== 'done' ? { opacity: 0.4, cursor: 'not-allowed' } : null}
                         >
                           <span className="r">R{String(r.round).padStart(2, '0')}</span>
@@ -210,6 +233,7 @@ export default function Results({ setToast }) {
             {allPredictions && allPredictions.length > 0 && (
               <div style={{ position: 'relative' }}>
                 <select
+                  aria-label="Tipper"
                   value={selectedUserId || ''}
                   onChange={e => {
                     const val = e.target.value;
@@ -246,10 +270,15 @@ export default function Results({ setToast }) {
         ) : (
           <>
             {/* KPI strip - only show if viewing a specific user's predictions */}
+            <div className="results-body">
             {predictions && selectedUserId && (
               <div className="results-kpis">
                 <div className="kpi-cell accent">
-                  <span className="lbl">Your Score</span>
+                  <span className="lbl">
+                    {String(selectedUserId) === String(user?.id)
+                      ? 'Your Score'
+                      : `${predictions.displayName || 'Tipper'}'s Score`}
+                  </span>
                   <span className="val" style={{ color: 'var(--red)' }}>
                     {totalPts}
                   </span>
@@ -270,7 +299,7 @@ export default function Results({ setToast }) {
                   <span className="sub">
                     {breakdown.pole_correct
                       ? `+${breakdown.pole_correct} pts · correct`
-                      : 'predicted ' + predictions.pole}
+                      : 'predicted ' + (driverById(predictions.pole)?.lastName || predictions.pole || '—')}
                   </span>
                 </div>
                 <div className="kpi-cell">
@@ -281,7 +310,7 @@ export default function Results({ setToast }) {
                   <span className="sub">
                     {breakdown.dnf_correct
                       ? `+${breakdown.dnf_correct} pts · correct`
-                      : 'predicted ' + predictions.dnf}
+                      : 'predicted ' + (driverById(predictions.dnf)?.lastName || predictions.dnf || '—')}
                   </span>
                 </div>
               </div>
@@ -332,6 +361,9 @@ export default function Results({ setToast }) {
                               key={uid}
                               className="prediction-item"
                               onClick={() => setSelectedUserId(uid)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={onActivate(() => setSelectedUserId(uid))}
                               style={{ cursor: hasDetails ? 'pointer' : 'default', opacity: hasDetails ? 1 : 0.5 }}
                             >
                               <div className="pred-name">{p.displayName || uid}</div>
@@ -375,6 +407,7 @@ export default function Results({ setToast }) {
                   </>
                 )}
               </div>
+            </div>
             </div>
 
             {predictions && (

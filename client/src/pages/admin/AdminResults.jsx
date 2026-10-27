@@ -3,7 +3,6 @@ import { api } from '../../api';
 import { useAppData } from '../../context/AppDataContext';
 import Topbar from '../../components/Topbar';
 import DriverDropdown from '../../components/DriverDropdown';
-import DriverChip from '../../components/DriverChip';
 
 export default function AdminResults({ setToast }) {
   const { races, drivers, countryFlag } = useAppData();
@@ -11,7 +10,7 @@ export default function AdminResults({ setToast }) {
   const [finishOrder, setFinishOrder] = useState(Array(10).fill(null));
   const [pole, setPole] = useState(null);
   const [dnfs, setDnfs] = useState([null]);
-  const [sprintPole, setSprintPole] = useState(null);
+  const [sprintWinner, setSprintWinner] = useState(null);
   const [sprintFinishOrder, setSprintFinishOrder] = useState(Array(10).fill(null));
   const [sprintDnfs, setSprintDnfs] = useState([null]);
   const [storedResults, setStoredResults] = useState({});
@@ -22,7 +21,7 @@ export default function AdminResults({ setToast }) {
   useEffect(() => {
     api.admin.results().then(rows => {
       setStoredResults(Object.fromEntries(rows.map(r => [r.race_round, r.result])));
-    }).catch(() => {});
+    }).catch(err => setToast(`Error loading results: ${err.message}`));
   }, []);
 
   useEffect(() => {
@@ -32,14 +31,14 @@ export default function AdminResults({ setToast }) {
       setFinishOrder(stored.finishOrder || Array(10).fill(null));
       setPole(stored.pole || null);
       setDnfs(stored.dnfs?.length ? stored.dnfs.map(d => d) : [null]);
-      setSprintPole(stored.sprintPole || null);
+      setSprintWinner(stored.sprintWinner || stored.sprintFinishOrder?.[0] || stored.sprintPole || null);
       setSprintFinishOrder(stored.sprintFinishOrder || Array(10).fill(null));
       setSprintDnfs(stored.sprintDnfs?.length ? stored.sprintDnfs.map(d => d) : [null]);
     } else {
       setFinishOrder(Array(10).fill(null));
       setPole(null);
       setDnfs([null]);
-      setSprintPole(null);
+      setSprintWinner(null);
       setSprintFinishOrder(Array(10).fill(null));
       setSprintDnfs([null]);
     }
@@ -72,7 +71,7 @@ export default function AdminResults({ setToast }) {
         finishOrder,
         pole,
         dnfs: dnfs.filter(Boolean),
-        sprintPole,
+        sprintWinner,
         sprintFinishOrder,
         sprintDnfs: sprintDnfs.filter(Boolean)
       });
@@ -86,8 +85,12 @@ export default function AdminResults({ setToast }) {
   }
 
   async function rescore() {
-    await api.admin.rescore(selectedRound);
-    setToast(`R${selectedRound} rescored`);
+    try {
+      await api.admin.rescore(selectedRound);
+      setToast(`R${selectedRound} rescored`);
+    } catch (err) {
+      setToast(`Error: ${err.message}`);
+    }
   }
 
   async function fetchFromOpenF1() {
@@ -129,8 +132,8 @@ export default function AdminResults({ setToast }) {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Race Results</h2>
-            <div className="muted" style={{ marginTop: 6 }}>Enter or correct official results — triggers automatic scoring</div>
+            <h2 className="page-title">Race Results</h2>
+            <div className="page-sub">Enter or correct official results — triggers automatic scoring</div>
           </div>
           <button className="btn" onClick={fetchAll} disabled={fetchingAll}>
             {fetchingAll ? 'Fetching…' : '⟳ Fetch all from OpenF1'}
@@ -138,7 +141,7 @@ export default function AdminResults({ setToast }) {
         </div>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-          {races.filter(r => r.status === 'done' || r.status === 'locked').map(r => (
+          {races.filter(r => r.status !== 'upcoming' && !r.isCancelled).map(r => (
             <button
               key={r.round}
               className={`btn${selectedRound === r.round ? ' primary' : ''}`}
@@ -155,7 +158,7 @@ export default function AdminResults({ setToast }) {
         )}
 
         {selectedRound && (
-          <div style={{ display: 'grid', gridTemplateColumns: race?.isSprint ? '380px 1fr 1fr' : '380px 1fr', gap: 18, alignItems: 'start' }}>
+          <div className={`ar-grid${race?.isSprint ? ' sprint' : ''}`}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div className="entry-card">
                 <h3>Pole Position</h3>
@@ -174,7 +177,7 @@ export default function AdminResults({ setToast }) {
                         placeholder="DNF driver"
                       />
                       {i > 0 && (
-                        <button className="btn ghost" style={{ height: 44, padding: '0 10px' }}
+                        <button className="btn ghost" style={{ height: 44, padding: '0 10px' }} aria-label={`Remove DNF ${i + 1}`}
                                 onClick={() => setDnfs(prev => prev.filter((_, j) => j !== i))}>✕</button>
                       )}
                     </div>
@@ -192,8 +195,8 @@ export default function AdminResults({ setToast }) {
                   </div>
 
                   <div className="entry-card">
-                    <h3>Sprint Pole Position</h3>
-                    <DriverDropdown value={sprintPole} onChange={setSprintPole} placeholder="Sprint pole sitter" />
+                    <h3>Sprint Winner</h3>
+                    <DriverDropdown value={sprintWinner} onChange={setSprintWinner} placeholder="Sprint winner" />
                   </div>
 
                   <div className="entry-card">
@@ -208,7 +211,7 @@ export default function AdminResults({ setToast }) {
                             placeholder="Sprint DNF driver"
                           />
                           {i > 0 && (
-                            <button className="btn ghost" style={{ height: 44, padding: '0 10px' }}
+                            <button className="btn ghost" style={{ height: 44, padding: '0 10px' }} aria-label={`Remove sprint DNF ${i + 1}`}
                                     onClick={() => setSprintDnfs(prev => prev.filter((_, j) => j !== i))}>✕</button>
                           )}
                         </div>
@@ -234,11 +237,8 @@ export default function AdminResults({ setToast }) {
               <h3>Race Finishing Order · P1 → P10</h3>
               <div className="draglist">
                 {finishOrder.map((id, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 3 }}>
-                      <div className={`pos-pill${i === 0 ? ' gold' : i < 3 ? ' silver' : ''}`}>P{i + 1}</div>
-                      {id ? <DriverChip driverId={id} showName /> : <span className="muted">empty</span>}
-                    </div>
+                  <div key={i} className="ar-pos-row">
+                    <div className={`pos-pill${i === 0 ? ' gold' : i < 3 ? ' silver' : ''}`}>P{i + 1}</div>
                     <DriverDropdown value={id} onChange={d => setPosition(i, d)} exclude={finishOrder} />
                   </div>
                 ))}
@@ -250,11 +250,8 @@ export default function AdminResults({ setToast }) {
                 <h3>Sprint Finishing Order · P1 → P10</h3>
                 <div className="draglist">
                   {sprintFinishOrder.map((id, i) => (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 3 }}>
-                        <div className={`pos-pill${i === 0 ? ' gold' : i < 3 ? ' silver' : ''}`}>P{i + 1}</div>
-                        {id ? <DriverChip driverId={id} showName /> : <span className="muted">empty</span>}
-                      </div>
+                    <div key={i} className="ar-pos-row">
+                      <div className={`pos-pill${i === 0 ? ' gold' : i < 3 ? ' silver' : ''}`}>P{i + 1}</div>
                       <DriverDropdown value={id} onChange={d => setSprintPosition(i, d)} exclude={sprintFinishOrder} />
                     </div>
                   ))}

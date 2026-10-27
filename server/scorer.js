@@ -1,8 +1,14 @@
 const pool = require('./db');
+const { SEASON } = require('./config');
 
 async function getScoringRules() {
   const { rows } = await pool.query('SELECT rule_key, points FROM scoring_rules');
   return Object.fromEntries(rows.map(r => [r.rule_key, r.points]));
+}
+
+// Older stored results called the sprint winner "sprintPole".
+function sprintWinnerOf(result) {
+  return result.sprintWinner || result.sprintFinishOrder?.[0] || result.sprintPole || null;
 }
 
 function scorePrediction(pred, result, rules) {
@@ -16,44 +22,46 @@ function scorePrediction(pred, result, rules) {
     pred.pos_6, pred.pos_7, pred.pos_8, pred.pos_9, pred.pos_10,
   ];
 
+  const counted = new Set();
   for (let i = 0; i < positions.length; i++) {
     const guessed = positions[i];
-    if (!guessed) continue;
+    // A driver only scores once, even if an imported/legacy tip lists them twice.
+    if (!guessed || counted.has(guessed)) continue;
+    counted.add(guessed);
     const actual = result.finishOrder[i];
     const actualIdx = result.finishOrder.indexOf(guessed);
 
     if (actual === guessed) {
-      const pts = rules.exact_position || 3;
+      const pts = rules.exact_position ?? 3;
       total += pts;
       breakdown.exact_position = (breakdown.exact_position || 0) + pts;
     } else if (actualIdx !== -1 && Math.abs(actualIdx - i) === 1) {
-      const pts = rules.position_one_off || 1;
+      const pts = rules.position_one_off ?? 1;
       total += pts;
       breakdown.position_one_off = (breakdown.position_one_off || 0) + pts;
     }
   }
 
   if (pred.pole && pred.pole === result.pole) {
-    const pts = rules.pole_correct || 2;
+    const pts = rules.pole_correct ?? 2;
     total += pts;
     breakdown.pole_correct = pts;
   }
 
   if (pred.dnf && result.dnfs && result.dnfs.includes(pred.dnf)) {
-    const pts = rules.dnf_correct || 1;
+    const pts = rules.dnf_correct ?? 1;
     total += pts;
     breakdown.dnf_correct = pts;
   }
 
-  if (pred.sprint_winner && pred.sprint_winner === result.sprintWinner) {
-    const pts = rules.sprint_winner_correct || 2;
+  if (pred.sprint_winner && pred.sprint_winner === sprintWinnerOf(result)) {
+    const pts = rules.sprint_winner_correct ?? 2;
     total += pts;
     breakdown.sprint_winner_correct = pts;
   }
 
   return { points: total, breakdown };
 }
-
 async function scoreRound(round, season, result) {
   const rules = await getScoringRules();
   const { rows: preds } = await pool.query(
@@ -73,6 +81,8 @@ async function scoreRound(round, season, result) {
           points_total = EXCLUDED.points_total,
           breakdown    = EXCLUDED.breakdown,
           scored_at    = EXCLUDED.scored_at
+        -- Scores set by an admin override are kept when a round is rescored.
+        WHERE race_scores.breakdown NOT LIKE '%"override":true%'
       `, [pred.user_id, round, season, points, JSON.stringify(breakdown)]);
     }
     await client.query('COMMIT');
@@ -85,7 +95,7 @@ async function scoreRound(round, season, result) {
 }
 
 async function rescoreAll() {
-  const { rows: stored } = await pool.query('SELECT * FROM race_results');
+  const { rows: stored } = await pool.query('SELECT * FROM race_results WHERE season = $1', [SEASON]);
   for (const r of stored) {
     await scoreRound(r.race_round, r.season, JSON.parse(r.result_json));
   }

@@ -20,7 +20,7 @@ async function request(method, path, body) {
     // Vercel platform errors (e.g. Deployment Protection) nest it: { error: { code, message } }
     const candidates = [err.error, err.error?.message, err.message];
     const message = candidates.find(m => typeof m === 'string' && m) || `HTTP ${res.status}`;
-    throw new Error(message);
+    throw Object.assign(new Error(message), { status: res.status });
   }
 
   return res.json();
@@ -59,6 +59,7 @@ export const api = {
   scores: {
     leaderboard: () => request('GET', '/scores'),
     round: (round) => request('GET', `/scores/round/${round}`),
+    rules: () => request('GET', '/scores/rules'),
   },
 
   polls: {

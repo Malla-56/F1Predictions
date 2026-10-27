@@ -4,6 +4,8 @@ import { useAppData } from '../context/AppDataContext';
 import Topbar from '../components/Topbar';
 import Avatar from '../components/Avatar';
 import useIsMobile from '../hooks/useIsMobile';
+import { onActivate } from '../components/useDialog';
+import { Fragment } from 'react';
 
 export default function Scoreboard() {
   const { races } = useAppData();
@@ -13,8 +15,14 @@ export default function Scoreboard() {
   const [expanded, setExpanded] = useState(null);
   const isMobile = useIsMobile();
 
+  const [loadError, setLoadError] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
   useEffect(() => {
-    api.scores.leaderboard().then(setRows).catch(() => {});
+    api.scores.leaderboard()
+      .then(setRows)
+      .catch(e => setLoadError(e.message))
+      .finally(() => setLoaded(true));
   }, []);
 
   const completedRaces = races.filter(r => r.status === 'done');
@@ -34,9 +42,14 @@ export default function Scoreboard() {
 
   function SortHd({ k, label }) {
     return (
-      <span className={`sortable${sortKey === k ? ' active' : ''}`} onClick={() => onSort(k)}>
+      <button
+        type="button"
+        className={`sortable btn-reset${sortKey === k ? ' active' : ''}`}
+        onClick={() => onSort(k)}
+        aria-label={`Sort by ${label}${sortKey === k ? (sortDir === 'asc' ? ', ascending' : ', descending') : ''}`}
+      >
         {label} {sortKey === k && (sortDir === 'asc' ? '↑' : '↓')}
-      </span>
+      </button>
     );
   }
 
@@ -46,8 +59,8 @@ export default function Scoreboard() {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Scoreboard</h2>
-            <div className="muted" style={{ marginTop: 6 }}>
+            <h2 className="page-title">Scoreboard</h2>
+            <div className="page-sub">
               {rows.length} tippers · {completedRaces.length} rounds scored
             </div>
           </div>
@@ -78,13 +91,13 @@ export default function Scoreboard() {
             const isOpen = expanded === r.userId;
 
             const expandPanel = isOpen && (
-              <div key={`${r.userId}-exp`} className="score-expand">
+              <div key={`${r.userId}-exp`} id={`score-exp-${r.userId}`} className="score-expand">
                 {races.map(race => {
                   const entry = r.perRace?.[race.round];
                   const isDone = race.status === 'done';
                   return (
                     <div key={race.round} className="exp-cell"
-                         style={isDone && entry?.points >= 10 ? { borderColor: 'rgba(225,6,0,0.4)' } : !isDone ? { opacity: 0.4 } : {}}>
+                         style={isDone && entry?.points >= 10 ? { borderColor: 'var(--red-line)' } : !isDone ? { opacity: 0.4 } : {}}>
                       <span className="r">R{String(race.round).padStart(2, '0')}</span>
                       <span className={`p${!isDone || !entry ? ' bad' : ''}`}>
                         {isDone && entry ? entry.points : '—'}
@@ -101,6 +114,11 @@ export default function Scoreboard() {
                   <div
                     className={`score-card${r.isMe ? ' me' : ''}${isOpen ? ' expanded' : ''}`}
                     onClick={() => setExpanded(isOpen ? null : r.userId)}
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isOpen}
+                    aria-controls={isOpen ? `score-exp-${r.userId}` : undefined}
+                    onKeyDown={onActivate(() => setExpanded(isOpen ? null : r.userId))}
                   >
                     <span className={`rank${r.rank === 1 ? ' gold' : ''}`}>{String(r.rank).padStart(2, '0')}</span>
                     <Avatar displayName={r.displayName} size={32} isMe={r.isMe} />
@@ -122,11 +140,15 @@ export default function Scoreboard() {
             }
 
             return (
-              <>
+              <Fragment key={r.userId}>
                 <div
-                  key={r.userId}
                   className={`score-row${r.isMe ? ' me' : ''}${isOpen ? ' expanded' : ''}`}
                   onClick={() => setExpanded(isOpen ? null : r.userId)}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isOpen}
+                  aria-controls={isOpen ? `score-exp-${r.userId}` : undefined}
+                  onKeyDown={onActivate(() => setExpanded(isOpen ? null : r.userId))}
                 >
                   <span className={`rank${r.rank === 1 ? ' gold' : ''}`}>{String(r.rank).padStart(2, '0')}</span>
                   <Avatar displayName={r.displayName} size={36} isMe={r.isMe} />
@@ -138,13 +160,15 @@ export default function Scoreboard() {
                 </div>
 
                 {expandPanel}
-              </>
+              </Fragment>
             );
           })}
 
           {rows.length === 0 && (
             <div style={{ padding: '32px 16px', color: 'var(--text-3)', fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-              No scores yet — check back after the first race.
+              {!loaded ? 'Loading scores…'
+                : loadError ? `Couldn't load scores: ${loadError}`
+                : 'No scores yet — check back after the first race.'}
             </div>
           )}
         </div>

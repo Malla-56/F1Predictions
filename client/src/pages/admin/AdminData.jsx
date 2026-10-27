@@ -3,6 +3,7 @@ import Papa from 'papaparse';
 import { api } from '../../api';
 import { useAppData } from '../../context/AppDataContext';
 import Topbar from '../../components/Topbar';
+import { onActivate } from '../../components/useDialog';
 
 // ── Data helpers ───────────────────────────────────────────────────────────
 
@@ -166,13 +167,17 @@ function CoverageSection({ races, users, predMap, scoreMap, setToast, onDataChan
           <div key={race.round} style={{ border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
             <div
               onClick={() => openRound(race.round)}
-              style={{ display: 'grid', gridTemplateColumns: '48px 1fr 120px 80px 32px', gap: 12, alignItems: 'center', padding: '10px 14px', cursor: 'pointer', background: isOpen ? 'var(--surface-2)' : 'transparent' }}
+              role="button"
+              tabIndex={0}
+              aria-expanded={isOpen}
+              onKeyDown={onActivate(() => openRound(race.round))}
+              style={{ display: 'grid', gridTemplateColumns: '48px minmax(0,1fr) 120px minmax(80px,160px) 32px', gap: 12, alignItems: 'center', padding: '10px 14px', cursor: 'pointer', background: isOpen ? 'var(--surface-2)' : 'transparent' }}
             >
               <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>R{String(race.round).padStart(2,'0')}</div>
               <div style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 13 }}>{race.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ flex: 1, height: 4, background: 'var(--surface-3)', borderRadius: 2 }}>
-                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: pct === 100 ? 'var(--green)' : pct > 50 ? '#f5a623' : 'var(--red)' }} />
+                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: pct === 100 ? 'var(--green)' : pct > 50 ? 'var(--amber)' : 'var(--red)' }} />
                 </div>
                 <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{covered}/{users.length}</span>
               </div>
@@ -180,7 +185,7 @@ function CoverageSection({ races, users, predMap, scoreMap, setToast, onDataChan
                 {users.map(u => {
                   const hasPred = !!roundPreds[u.username];
                   const hasScore = roundScores[u.username] != null;
-                  const color = !hasPred ? 'var(--red)' : hasScore ? 'var(--green)' : '#f5a623';
+                  const color = !hasPred ? 'var(--red)' : hasScore ? 'var(--green)' : 'var(--amber)';
                   return <div key={u.username} title={`${u.display_name}: ${!hasPred ? 'missing' : hasScore ? `${roundScores[u.username]}pts` : 'no score'}`} style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />;
                 })}
               </div>
@@ -226,6 +231,7 @@ function CoverageSection({ races, users, predMap, scoreMap, setToast, onDataChan
                                   min="0"
                                   max="200"
                                   placeholder="pts"
+                                  aria-label={`Total score for ${u.display_name}`}
                                   value={val}
                                   onChange={e => setOverrides(prev => ({ ...prev, [u.username]: e.target.value }))}
                                   onClick={e => e.stopPropagation()}
@@ -317,7 +323,7 @@ function ImportSection({ setToast, onSuccess }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <input type="file" accept=".csv" onChange={handleFile} style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-2)' }} />
+        <input type="file" accept=".csv" aria-label="CSV file" onChange={handleFile} style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-2)' }} />
         {csvErrors.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {csvErrors.map((err, i) => <div key={i} className="mono" style={{ fontSize: 11, color: 'var(--red-2)' }}>✗ {err}</div>)}
@@ -400,13 +406,13 @@ export default function AdminData({ setToast }) {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Data Manager</h2>
-            <div className="muted" style={{ marginTop: 6 }}>View, export, and fix prediction data across all rounds</div>
+            <h2 className="page-title">Data Manager</h2>
+            <div className="page-sub">View, export, and fix prediction data across all rounds</div>
           </div>
         </div>
 
         {/* Stats bar */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 28 }}>
           {[
             ['Predictions', totalFilled],
             ['Missing', missingCount < 0 ? 0 : missingCount],
@@ -420,16 +426,16 @@ export default function AdminData({ setToast }) {
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 28, alignItems: 'start' }}>
+        <div className="ad-grid">
           {/* Left: coverage + import */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
 
             {/* Coverage */}
             <div>
               <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>
                 Round Coverage
                 <span style={{ marginLeft: 12, color: 'var(--green)' }}>● scored</span>
-                <span style={{ marginLeft: 8, color: '#f5a623' }}>● picks only</span>
+                <span style={{ marginLeft: 8, color: 'var(--amber)' }}>● picks only</span>
                 <span style={{ marginLeft: 8, color: 'var(--red)' }}>● missing</span>
               </div>
               {loading
@@ -449,7 +455,7 @@ export default function AdminData({ setToast }) {
           </div>
 
           {/* Right: export */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 24 }}>
+          <div className="ad-side" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 2 }}>Export</div>
 
             <div className="card" style={{ padding: '16px 18px' }}>

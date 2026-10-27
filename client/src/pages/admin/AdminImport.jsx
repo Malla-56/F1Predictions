@@ -172,7 +172,8 @@ function CsvTab({ setToast }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 680 }}>
+    <div className="admin-split">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
       <div className="card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Step 1 — Download template</div>
@@ -191,6 +192,7 @@ function CsvTab({ setToast }) {
           <input
             type="file"
             accept=".csv"
+            aria-label="CSV file"
             onChange={handleFileChange}
             style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-2)' }}
           />
@@ -213,9 +215,10 @@ function CsvTab({ setToast }) {
           </div>
         </form>
       </div>
+      </div>
 
       {result && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
           <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Import Summary</div>
 
           {result.errors.map((err, i) => (
@@ -301,12 +304,13 @@ function JsonTab({ setToast }) {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', maxWidth: 1000 }}>
-      <div>
+    <div className="admin-split">
+      <div style={{ minWidth: 0 }}>
         <form onSubmit={submit}>
           <div className="fld" style={{ marginBottom: 14 }}>
-            <label>JSON Data</label>
+            <label htmlFor="import-json">JSON Data</label>
             <textarea
+              id="import-json"
               value={json}
               onChange={e => setJson(e.target.value)}
               placeholder="Paste your JSON array here…"
@@ -394,8 +398,8 @@ export default function AdminImport({ setToast }) {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Import Predictions</h2>
-            <div className="muted" style={{ marginTop: 6 }}>Bulk-import historical picks via CSV, or paste raw JSON</div>
+            <h2 className="page-title">Import Predictions</h2>
+            <div className="page-sub">Bulk-import historical picks via CSV, or paste raw JSON</div>
           </div>
         </div>
 

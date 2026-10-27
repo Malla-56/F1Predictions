@@ -38,3 +38,5 @@ bash.exe.stackdump
 
 # Misc
 PLAN.md
+server/*.db-shm
+server/*.db-wal

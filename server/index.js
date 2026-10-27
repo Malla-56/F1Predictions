@@ -5,7 +5,7 @@ const path = require('path');
 const express = require('express');
 
 // Serve the built React app locally (after `npm run build`)
-const publicDir = path.join(__dirname, '..', 'public');
+const publicDir = path.join(__dirname, '..', 'client', 'dist');
 app.use(express.static(publicDir));
 app.get('*', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 

@@ -7,7 +7,7 @@ export default function AdminScoring({ setToast }) {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    api.admin.scoring().then(setRules).catch(() => {});
+    api.admin.scoring().then(setRules).catch(err => setToast(`Error loading rules: ${err.message}`));
   }, []);
 
   function update(id, points) {
@@ -16,9 +16,13 @@ export default function AdminScoring({ setToast }) {
   }
 
   async function save() {
-    await api.admin.saveScoring(rules.map(r => ({ id: r.id, points: r.points })));
-    setDirty(false);
-    setToast('Scoring rules saved — leaderboard will update on next page load');
+    try {
+      await api.admin.saveScoring(rules.map(r => ({ id: r.id, points: r.points })));
+      setDirty(false);
+      setToast('Scoring rules saved and all scored rounds recalculated');
+    } catch (err) {
+      setToast(`Error: ${err.message}`);
+    }
   }
 
   return (
@@ -27,13 +31,13 @@ export default function AdminScoring({ setToast }) {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Scoring Rules</h2>
-            <div className="muted" style={{ marginTop: 6 }}>Edit point values — changes apply to all future score calculations</div>
+            <h2 className="page-title">Scoring Rules</h2>
+            <div className="page-sub">Edit point values — changes apply to all future score calculations</div>
           </div>
           <button className="btn primary" disabled={!dirty} onClick={save}>Save changes →</button>
         </div>
 
-        <div className="card" style={{ overflow: 'hidden', maxWidth: 700 }}>
+        <div className="card" style={{ overflowX: 'auto' }}>
           <table className="admin-table" style={{ width: '100%' }}>
             <thead>
               <tr>
@@ -53,6 +57,7 @@ export default function AdminScoring({ setToast }) {
                       min="0"
                       max="100"
                       value={r.points}
+                      aria-label={`Points for ${r.rule_key}`}
                       onChange={e => update(r.id, e.target.value)}
                       style={{
                         width: 64, height: 34, textAlign: 'center',
@@ -68,7 +73,7 @@ export default function AdminScoring({ setToast }) {
           </table>
         </div>
 
-        <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 16, lineHeight: 1.7, maxWidth: 500 }}>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 16, lineHeight: 1.7, maxWidth: '90ch' }}>
           Note: changing point values does not automatically rescore past races. Use the Results page to trigger a rescore for individual rounds.
         </div>
       </div>

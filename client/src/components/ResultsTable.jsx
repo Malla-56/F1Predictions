@@ -1,4 +1,5 @@
 import DriverChip from './DriverChip';
+import { useAppData } from '../context/AppDataContext';
 
 function distanceClass(d) {
   if (d === 0) return 'match-0';
@@ -20,8 +21,9 @@ function pointsForDistance(d) {
 }
 
 export default function ResultsTable({ rows, actual = false, compact = false }) {
+  const { driverById } = useAppData() || {};
   return (
-    <div className="rtable">
+    <div className={'rtable' + (actual ? ' rtable-actual' : '')}>
       <div className="rtable-hd">
         <span>Pos</span>
         <span>Driver</span>
@@ -36,8 +38,8 @@ export default function ResultsTable({ rows, actual = false, compact = false }) 
             <span className={'pos' + (r.pos === 0 ? ' gold' : '')}>P{r.pos + 1}</span>
             <DriverChip driverId={r.driverId} />
             {actual ? (
-              <span className="status mono" style={{ color: 'var(--text-3)' }}>
-                {/* Team short code will be displayed from driver data */}
+              <span className="status mono" style={{ color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {driverById?.(r.driverId)?.team || '—'}
               </span>
             ) : (
               <span className="status">

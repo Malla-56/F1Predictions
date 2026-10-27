@@ -10,6 +10,8 @@ import DriverChip from '../components/DriverChip';
 import Icon from '../components/Icon';
 import PollWidget from '../components/PollWidget';
 import NotifyButton from '../components/NotifyButton';
+import Modal from '../components/Modal';
+import { onActivate } from '../components/useDialog';
 
 export default function Home({ setToast, theme, setTheme }) {
   const { user } = useAuth();
@@ -18,28 +20,32 @@ export default function Home({ setToast, theme, setTheme }) {
 
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [predError, setPredError] = useState(null);
   const [selectedTip, setSelectedTip] = useState(null);
 
-  const current  = races.find(r => r.status === 'current'  && !r.isCancelled);
+  // Race weekend in progress, else the next race that hasn't started (open or locked early).
+  const current  = races.find(r => r.status === 'current' && !r.isCancelled);
   const upcoming = current
-    || races.find(r => r.status === 'upcoming' && !r.isCancelled)
-    || races.find(r => r.status === 'future'   && !r.isCancelled);
+    || races.find(r => (r.status === 'upcoming' || r.status === 'locked') && !r.isCancelled);
   const cancelledRaces = races.filter(r => r.isCancelled);
 
   useEffect(() => {
     if (!upcoming) return;
+    let stale = false;
     setLoading(true);
+    setPredError(null);
     api.predictions.list(upcoming.round)
-      .then(setPredictions)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then(p => { if (!stale) setPredictions(p); })
+      .catch(e => { if (!stale) setPredError(e.message); })
+      .finally(() => { if (!stale) setLoading(false); });
+    return () => { stale = true; };
   }, [upcoming?.round]);
 
   const topbarRight = (
     <>
-      {upcoming && <span className="badge dot locked">R{upcoming.round} · {current ? 'Race Day' : 'Open'}</span>}
+      {upcoming && <span className="badge dot locked">R{upcoming.round} · {current ? 'Race Day' : upcoming.isLocked ? 'Locked' : 'Open'}</span>}
       <NotifyButton setToast={setToast} />
-      <button className="icon-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme">
+      <button className="icon-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme" aria-label="Toggle theme">
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
       </button>
     </>
@@ -60,11 +66,12 @@ export default function Home({ setToast, theme, setTheme }) {
     <>
       <Topbar crumbs={['Pulse League', 'Home']} right={topbarRight} />
       <div className="content">
+        <div className="home-top">
         <div className="hero">
           <div className="hero-left">
             <div className="hero-meta">
               <span className="live-dot" />
-              <span>Round {String(upcoming.round).padStart(2, '0')} / 2025</span>
+              <span>Round {String(upcoming.round).padStart(2, '0')} / {races[0]?.date ? new Date(races[0].date).getFullYear() : new Date().getFullYear()}</span>
               <span style={{ color: 'var(--line-2)' }}>·</span>
               <span>{current ? 'Race Weekend' : 'Next Race'}</span>
             </div>
@@ -94,14 +101,17 @@ export default function Home({ setToast, theme, setTheme }) {
         </div>
 
         <PollWidget />
+        </div>
 
         <div className="sec-head">
           <h2>Community Tips</h2>
-          <div className="meta">{predictions.filter(p => p.locked).length} / {predictions.length} Submitted</div>
+          <div className="meta">{predictions.length} Submitted</div>
         </div>
 
         {loading ? (
           <div className="loading">Loading tips…</div>
+        ) : predError ? (
+          <div className="results-empty">Couldn't load tips: {predError}</div>
         ) : (
           <div className="tipgrid">
             {predictions.map(p => (
@@ -121,7 +131,7 @@ export default function Home({ setToast, theme, setTheme }) {
           </div>
         )}
         {cancelledRaces.map(r => (
-          <div key={r.round} className="card" style={{ padding: '14px 18px', marginBottom: 12, borderColor: 'rgba(225,6,0,0.4)', background: 'var(--red-dim)' }}>
+          <div key={r.round} className="card" style={{ padding: '14px 18px', marginBottom: 12, borderColor: 'var(--red-line)', background: 'var(--red-dim)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)', letterSpacing: '0.08em' }}>
                 ✗ R{String(r.round).padStart(2, '0')} · {r.name}
@@ -132,13 +142,12 @@ export default function Home({ setToast, theme, setTheme }) {
         ))}
 
         {selectedTip && (
-          <div className="modal-bg" onClick={() => setSelectedTip(null)}>
-            <div className="modal" style={{ maxWidth: 520, padding: '28px' }} onClick={e => e.stopPropagation()}>
+          <Modal onClose={() => setSelectedTip(null)} labelledBy="home-tip-title" style={{ maxWidth: 520, padding: '28px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <Avatar displayName={selectedTip.displayName} size={40} isMe={selectedTip.userId === user?.id} />
                   <div>
-                    <div style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 15 }}>{selectedTip.displayName}</div>
+                    <div id="home-tip-title" style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 15 }}>{selectedTip.displayName}</div>
                     <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>FULL TIP · {upcoming?.name?.toUpperCase()}</div>
                   </div>
                 </div>
@@ -172,8 +181,7 @@ export default function Home({ setToast, theme, setTheme }) {
                   </button>
                 </div>
               )}
-            </div>
-          </div>
+          </Modal>
         )}
       </div>
     </>
@@ -181,8 +189,19 @@ export default function Home({ setToast, theme, setTheme }) {
 }
 
 function TipCard({ prediction: p, isMe, raceName, raceIsLocked, onViewFull, navigate }) {
+  // Other players' picks stay hidden until the race locks; your own are always visible.
+  const revealed = !!p.positions;
   return (
-    <div className={`tipcard${isMe ? ' me' : ''}`} style={{ cursor: p.locked ? 'pointer' : 'default' }} onClick={() => p.locked && onViewFull()}>
+    <div
+      className={`tipcard${isMe ? ' me' : ''}${revealed ? ' clickable' : ''}`}
+      onClick={() => revealed && onViewFull()}
+      {...(revealed ? {
+        role: 'button',
+        tabIndex: 0,
+        'aria-label': `View ${p.displayName}'s full tip`,
+        onKeyDown: onActivate(onViewFull),
+      } : {})}
+    >
       <div className="tipcard-hd">
         <Avatar displayName={p.displayName} size={36} isMe={isMe} />
         <div className="tipcard-name">
@@ -190,8 +209,8 @@ function TipCard({ prediction: p, isMe, raceName, raceIsLocked, onViewFull, navi
           <div className="h">{isMe ? 'You' : ''}</div>
         </div>
         <div className="tipcard-status">
-          <span className={`badge dot ${p.locked ? 'locked' : 'pending'}`}>
-            {p.locked ? 'Submitted' : 'Pending'}
+          <span className={"badge dot locked"}>
+            Submitted
           </span>
         </div>
       </div>
@@ -199,25 +218,25 @@ function TipCard({ prediction: p, isMe, raceName, raceIsLocked, onViewFull, navi
       <div className="tipcard-picks">
         <div className="pickrow">
           <span className="pos gold">POLE</span>
-          {p.locked ? <DriverChip driverId={p.pole} /> : <span className="muted mono" style={{ fontSize: 11 }}>Hidden</span>}
+          {revealed ? <DriverChip driverId={p.pole} /> : <span className="muted mono" style={{ fontSize: 11 }}>Hidden</span>}
         </div>
         <div className="pickrow">
           <span className="pos gold">P1</span>
-          {p.locked ? <DriverChip driverId={p.positions?.[0]} /> : <span className="muted mono" style={{ fontSize: 11 }}>Hidden</span>}
+          {revealed ? <DriverChip driverId={p.positions?.[0]} /> : <span className="muted mono" style={{ fontSize: 11 }}>Hidden</span>}
         </div>
         <div className="pickrow">
           <span className="pos">P2</span>
-          {p.locked ? <DriverChip driverId={p.positions?.[1]} /> : <span className="muted mono" style={{ fontSize: 11 }}>Hidden</span>}
+          {revealed ? <DriverChip driverId={p.positions?.[1]} /> : <span className="muted mono" style={{ fontSize: 11 }}>Hidden</span>}
         </div>
         <div className="pickrow">
           <span className="pos">P3</span>
-          {p.locked ? <DriverChip driverId={p.positions?.[2]} /> : <span className="muted mono" style={{ fontSize: 11 }}>Hidden</span>}
+          {revealed ? <DriverChip driverId={p.positions?.[2]} /> : <span className="muted mono" style={{ fontSize: 11 }}>Hidden</span>}
         </div>
       </div>
 
       <div className="tipcard-foot">
-        <span>{p.locked ? 'Submitted' : 'Awaiting submission'}</span>
-        {p.locked && <span>↗ Click for full picks</span>}
+        <span>{revealed ? 'Submitted' : 'Picks revealed at lock'}</span>
+        {revealed && <span>↗ Click for full picks</span>}
       </div>
     </div>
   );

@@ -5,21 +5,25 @@ import { useAppData } from '../context/AppDataContext';
 import Topbar from '../components/Topbar';
 import DriverChip from '../components/DriverChip';
 import useIsMobile from '../hooks/useIsMobile';
+import Modal from '../components/Modal';
+import { onActivate } from '../components/useDialog';
 
 export default function MyTips() {
-  const { races, countryFlag } = useAppData();
+  const { races, countryFlag, loading: racesLoading } = useAppData();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [myPreds, setMyPreds] = useState([]);
   const [scores, setScores] = useState({});
   const [expandedRound, setExpandedRound] = useState(null);
 
+  const [loadError, setLoadError] = useState(null);
+
   useEffect(() => {
-    api.predictions.myAll().then(setMyPreds).catch(() => {});
+    api.predictions.myAll().then(setMyPreds).catch(e => setLoadError(e.message));
     api.scores.leaderboard().then(rows => {
       const me = rows.find(r => r.isMe);
       if (me) setScores(me.perRace);
-    }).catch(() => {});
+    }).catch(e => setLoadError(e.message));
   }, []);
 
   const predMap = Object.fromEntries(myPreds.map(p => [p.round, p]));
@@ -41,14 +45,17 @@ export default function MyTips() {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>My Tips</h2>
-            <div className="muted" style={{ marginTop: 6 }}>Round-by-round submissions · 2025 season</div>
+            <h2 className="page-title">My Tips</h2>
+            <div className="page-sub">Round-by-round submissions · {races[0]?.date ? new Date(races[0].date).getFullYear() : new Date().getFullYear()} season</div>
           </div>
         </div>
 
+        {loadError && <div className="results-empty">Couldn't load your tips: {loadError}</div>}
+        {racesLoading && <div className="loading">Loading races…</div>}
+
         <div className="score-table">
           {!isMobile && (
-            <div className="score-row head" style={{ gridTemplateColumns: '56px 1fr 130px 130px 130px 120px 32px' }}>
+            <div className="score-row mytips-row head">
               <span>Round</span>
               <span>Race</span>
               <span>Pole</span>
@@ -79,6 +86,9 @@ export default function MyTips() {
                   className="mytips-card"
                   style={{ opacity: r.status === 'future' && !pred ? 0.5 : 1 }}
                   onClick={onRowClick}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={onActivate(onRowClick)}
                 >
                   <div className="mytips-card-hd">
                     <span className="rank" style={{ fontSize: 14, color: r.status === 'upcoming' ? 'var(--red)' : 'var(--text-2)' }}>
@@ -122,13 +132,17 @@ export default function MyTips() {
             return (
               <div key={r.round}>
                 <div
-                  className="score-row"
+                  className="score-row mytips-row"
                   style={{
-                    gridTemplateColumns: '56px 1fr 130px 130px 130px 120px 32px',
                     opacity: r.status === 'future' && !pred ? 0.5 : 1,
                     cursor: pred ? 'pointer' : (r.status !== 'done' ? 'pointer' : 'default'),
                   }}
                   onClick={onRowClick}
+                  {...(pred || r.status !== 'done' ? {
+                    role: 'button',
+                    tabIndex: 0,
+                    onKeyDown: onActivate(onRowClick),
+                  } : {})}
                 >
                   <span className="rank" style={{ fontSize: 15, color: r.status === 'upcoming' ? 'var(--red)' : 'var(--text-2)' }}>
                     R{String(r.round).padStart(2, '0')}
@@ -158,10 +172,9 @@ export default function MyTips() {
         </div>
 
         {expandedRound && predMap[expandedRound] && (
-          <div className="modal-bg" onClick={() => setExpandedRound(null)}>
-            <div className="modal" onClick={e => e.stopPropagation()}>
+          <Modal onClose={() => setExpandedRound(null)} labelledBy="mytips-modal-title">
               <div style={{ marginBottom: 16 }}>
-                <h3>Round {String(expandedRound).padStart(2, '0')} — Full Tips</h3>
+                <h3 id="mytips-modal-title">Round {String(expandedRound).padStart(2, '0')} — Full Tips</h3>
                 <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
                   {races.find(r => r.round === expandedRound)?.name}
                 </div>
@@ -184,8 +197,7 @@ export default function MyTips() {
                   <DriverChip driverId={predMap[expandedRound].dnf} showName />
                 </div>
               </div>
-            </div>
-          </div>
+          </Modal>
         )}
       </div>
     </>

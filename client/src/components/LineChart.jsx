@@ -1,30 +1,56 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useLayoutEffect, useId } from 'react';
 
-export default function LineChart({ races, series, height = 280 }) {
-  const [w, setW] = useState(640);
+const MIN_LABEL_STEP = 28;
+
+// Height scales with width (≈0.32·w, clamped 220–380) unless an explicit height is passed.
+export default function LineChart({ races, series, height }) {
+  const [w, setW] = useState(0);
   const ref = useRef(null);
   const [hover, setHover] = useState(null);
+  const gradId = useId().replace(/:/g, '') + '-redGrad';
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!ref.current) return;
+    setW(ref.current.getBoundingClientRect().width);
     const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
     ro.observe(ref.current);
     return () => ro.disconnect();
   }, []);
 
+  const h = height ?? Math.round(Math.min(380, Math.max(220, w * 0.32)));
   const padL = 38, padR = 20, padT = 12, padB = 36;
   const innerW = Math.max(100, w - padL - padR);
-  const innerH = height - padT - padB;
+  const innerH = h - padT - padB;
   const allVals = series.flatMap(s => s.values);
   const max = Math.max(20, Math.ceil(Math.max(...allVals) / 10) * 10);
   const xStep = races.length > 1 ? innerW / (races.length - 1) : innerW;
   const xy = (i, v) => [padL + i * xStep, padT + innerH - (v / max) * innerH];
+  const labelEvery = Math.max(1, Math.ceil(MIN_LABEL_STEP / Math.max(1, xStep)));
+
+  function indexFromClientX(clientX) {
+    const svg = ref.current?.querySelector('svg');
+    if (!svg || races.length === 0) return null;
+    const x = clientX - svg.getBoundingClientRect().left;
+    const i = races.length > 1 ? Math.round((x - padL) / xStep) : 0;
+    return Math.max(0, Math.min(races.length - 1, i));
+  }
+
+  function onPointer(e) {
+    setHover(indexFromClientX(e.clientX));
+  }
 
   return (
     <div ref={ref} style={{ width: '100%' }}>
-      <svg width={w} height={height} style={{ display: 'block', overflow: 'visible' }}>
+      {w > 0 && (
+      <svg
+        width={w} height={h}
+        style={{ display: 'block', overflow: 'visible', touchAction: 'pan-y' }}
+        onPointerMove={onPointer}
+        onPointerDown={onPointer}
+        onPointerLeave={e => { if (e.pointerType === 'mouse') setHover(null); }}
+      >
         <defs>
-          <linearGradient id="redGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--red)" stopOpacity="0.18" />
             <stop offset="100%" stopColor="var(--red)" stopOpacity="0" />
           </linearGradient>
@@ -41,7 +67,7 @@ export default function LineChart({ races, series, height = 280 }) {
           </g>
         ))}
 
-        {races.map((r, i) => (
+        {races.map((r, i) => (i % labelEvery === 0 || i === races.length - 1) && (
           <text key={r.round} x={padL + i * xStep} y={padT + innerH + 18}
                 fontFamily="var(--mono)" fontSize="10" fill="var(--text-3)" textAnchor="middle">
             R{String(r.round).padStart(2, '0')}
@@ -58,7 +84,7 @@ export default function LineChart({ races, series, height = 280 }) {
               {si === 0 && (
                 <path
                   d={path + ` L ${xy(s.values.length - 1, 0)[0]},${padT + innerH} L ${padL},${padT + innerH} Z`}
-                  fill="url(#redGrad)" opacity="0.6"
+                  fill={`url(#${gradId})`} opacity="0.6"
                 />
               )}
               <path d={path} fill="none" stroke={s.color} strokeWidth="2"
@@ -75,18 +101,11 @@ export default function LineChart({ races, series, height = 280 }) {
           );
         })}
 
-        {races.map((r, i) => (
-          <rect key={r.round}
-                x={padL + (i - 0.5) * xStep} y={padT}
-                width={xStep} height={innerH} fill="transparent"
-                onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} />
-        ))}
-
-        {hover !== null && (() => {
+        {hover !== null && races[hover] && (() => {
           const [x] = xy(hover, 0);
           const flipX = x > w - 130;
           return (
-            <g transform={`translate(${x}, ${padT})`}>
+            <g transform={`translate(${x}, ${padT})`} pointerEvents="none">
               <line x1="0" y1="0" x2="0" y2={innerH} stroke="var(--red)" strokeDasharray="2 3" />
               <g transform={`translate(${flipX ? -110 : 8}, 0)`}>
                 <rect width="104" height={series.length * 16 + 18} rx="2"
@@ -105,6 +124,7 @@ export default function LineChart({ races, series, height = 280 }) {
           );
         })()}
       </svg>
+      )}
     </div>
   );
 }

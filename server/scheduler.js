@@ -1,8 +1,14 @@
 const pool = require('./db');
 const openf1 = require('./openf1');
+const { getCalendar } = require('./calendar');
 const { scoreRound } = require('./scorer');
+const { SEASON } = require('./config');
 
-const SEASON = 2026;
+const HOUR = 60 * 60 * 1000;
+// Don't read a classification until the race has been over for a while…
+const SETTLE_MS = 1 * HOUR;
+// …and keep refreshing it for a few days to pick up stewards' penalties.
+const REFRESH_WINDOW_MS = 4 * 24 * HOUR;
 
 async function saveAndScore(round, result) {
   await pool.query(`
@@ -19,36 +25,34 @@ async function saveAndScore(round, result) {
 async function fetchPendingResults() {
   console.log('[scheduler] checking for pending race results…');
   try {
-    const meetings = await openf1.getMeetings(SEASON);
-    const sorted = meetings
-      .filter(m => m.meeting_key && m.circuit_short_name && !m.meeting_name?.toLowerCase().includes('testing'))
-      .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
-
+    const calendar = await getCalendar(SEASON);
     const { rows } = await pool.query(
-      'SELECT race_round FROM race_results WHERE season = $1',
+      'SELECT race_round, source FROM race_results WHERE season = $1',
       [SEASON]
     );
-    const stored = new Set(rows.map(r => r.race_round));
+    const stored = new Map(rows.map(r => [r.race_round, r.source]));
 
     const now = Date.now();
     let fetched = 0;
     const errors = [];
 
-    for (let i = 0; i < sorted.length; i++) {
-      const round = i + 1;
-      if (stored.has(round)) continue;
-      if (new Date(sorted[i].date_start).getTime() > now) break;
-      // Skip (don't filter) cancelled meetings so stored round numbers stay aligned.
-      if (sorted[i].is_cancelled) continue;
+    for (const race of calendar) {
+      if (race.isCancelled || !race.sessions.race) continue;
+      const sinceEnd = now - race.raceEnd.getTime();
+      if (sinceEnd < SETTLE_MS) continue;
+      // Manually entered results are never overwritten; OpenF1 ones are refreshed for a few days.
+      const source = stored.get(race.round);
+      if (source === 'manual') continue;
+      if (source && sinceEnd > REFRESH_WINDOW_MS) continue;
 
       try {
-        const result = await openf1.fetchAndBuildResult(round, SEASON);
-        await saveAndScore(round, result);
-        console.log(`[scheduler] R${round} fetched and scored ✓`);
+        const result = await openf1.buildResult(race);
+        await saveAndScore(race.round, result);
+        console.log(`[scheduler] R${race.round} fetched and scored ✓`);
         fetched++;
       } catch (err) {
-        console.warn(`[scheduler] R${round} not ready: ${err.message}`);
-        errors.push({ round, error: err.message });
+        console.warn(`[scheduler] R${race.round} not ready: ${err.message}`);
+        errors.push({ round: race.round, error: err.message });
       }
     }
 

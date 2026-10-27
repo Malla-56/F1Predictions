@@ -1,5 +1,6 @@
 import { useAppData } from '../context/AppDataContext';
 import Icon from './Icon';
+import useDialog from './useDialog';
 
 // Full-screen-friendly driver grid. On phones it slides up as a bottom sheet;
 // on desktop it shows as a centred panel. Teams are ordered by the current
@@ -8,14 +9,15 @@ export default function DriverPicker({
   title, subtitle, value, taken = {}, onPick, onClear, onClose, onPrev, onNext,
 }) {
   const { driversByStanding: ordered } = useAppData();
+  const dlg = useDialog(onClose);
 
   return (
     <div className="sheet-bg" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()} role="dialog" aria-label={title}>
+      <div className="sheet" onClick={e => e.stopPropagation()} {...dlg.props}>
         <div className="sheet-hd">
           <button className="sheet-nav" onClick={onPrev} disabled={!onPrev} aria-label="Previous pick">‹</button>
           <div className="sheet-title">
-            <strong>{title}</strong>
+            <strong id={dlg.titleId}>{title}</strong>
             {subtitle && <span>{subtitle}</span>}
           </div>
           <button className="sheet-nav" onClick={onNext} disabled={!onNext} aria-label="Next pick">›</button>

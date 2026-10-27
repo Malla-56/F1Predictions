@@ -3,6 +3,7 @@ import { api } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import Topbar from '../../components/Topbar';
 import Avatar from '../../components/Avatar';
+import Modal from '../../components/Modal';
 
 export default function AdminUsers({ setToast }) {
   const { user: me } = useAuth();
@@ -14,29 +15,33 @@ export default function AdminUsers({ setToast }) {
   const [resetting, setResetting] = useState(false);
 
   function load() {
-    api.admin.users().then(setUsers).catch(() => {});
+    api.admin.users().then(setUsers).catch(err => setToast(`Error loading users: ${err.message}`));
   }
 
   useEffect(load, []);
 
-  async function kick(user) {
+  async function update(user, data, message) {
+    try {
+      await api.admin.updateUser(user.id, data);
+      setToast(message);
+      load();
+    } catch (err) {
+      setToast(`Error: ${err.message}`);
+    }
+  }
+
+  function kick(user) {
     if (!window.confirm(`Kick ${user.display_name}? They will no longer be able to log in.`)) return;
-    await api.admin.updateUser(user.id, { is_active: 0 });
-    setToast(`${user.display_name} deactivated`);
-    load();
+    update(user, { is_active: 0 }, `${user.display_name} deactivated`);
   }
 
-  async function reactivate(user) {
-    await api.admin.updateUser(user.id, { is_active: 1 });
-    setToast(`${user.display_name} reactivated`);
-    load();
+  function reactivate(user) {
+    update(user, { is_active: 1 }, `${user.display_name} reactivated`);
   }
 
-  async function toggleAdmin(user) {
+  function toggleAdmin(user) {
     const newRole = user.role === 'admin' ? 'user' : 'admin';
-    await api.admin.updateUser(user.id, { role: newRole });
-    setToast(`${user.display_name} is now ${newRole}`);
-    load();
+    update(user, { role: newRole }, `${user.display_name} is now ${newRole}`);
   }
 
   function openReset(user) {
@@ -82,8 +87,8 @@ export default function AdminUsers({ setToast }) {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Users</h2>
-            <div className="muted" style={{ marginTop: 6 }}>{users.filter(u => u.is_active).length} active · {users.length} total</div>
+            <h2 className="page-title">Users</h2>
+            <div className="page-sub">{users.filter(u => u.is_active).length} active · {users.length} total</div>
           </div>
         </div>
 
@@ -148,14 +153,14 @@ export default function AdminUsers({ setToast }) {
       </div>
 
       {resetTarget && (
-        <div className="modal-bg" onClick={closeReset}>
-          <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
-            <h3>Reset Password</h3>
+        <Modal onClose={closeReset} labelledBy="reset-pw-title" style={{ maxWidth: 400 }}>
+            <h3 id="reset-pw-title">Reset Password</h3>
             <p>Set a new password for <strong>{resetTarget.display_name}</strong>.</p>
             <form onSubmit={submitReset}>
               <div className="fld">
-                <label>New Password</label>
+                <label htmlFor="reset-new-pw">New Password</label>
                 <input
+                  id="reset-new-pw"
                   type="password"
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
@@ -164,8 +169,9 @@ export default function AdminUsers({ setToast }) {
                 />
               </div>
               <div className="fld">
-                <label>Confirm Password</label>
+                <label htmlFor="reset-confirm-pw">Confirm Password</label>
                 <input
+                  id="reset-confirm-pw"
                   type="password"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
@@ -184,8 +190,7 @@ export default function AdminUsers({ setToast }) {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

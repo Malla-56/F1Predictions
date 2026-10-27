@@ -1,4 +1,4 @@
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import Icon from './Icon';
 import Avatar from './Avatar';
 import { useAuth } from '../context/AuthContext';
@@ -24,12 +24,10 @@ const ADMIN_NAV = [
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
   const { pathname } = useLocation();
 
   const isAdmin = pathname.startsWith('/admin');
   const nav = isAdmin ? ADMIN_NAV : USER_NAV;
-  console.log("🚀 ~ Sidebar ~ nav:", nav)
 
   return (
     <aside className="sidebar">
@@ -44,39 +42,44 @@ export default function Sidebar() {
       {/* Scrollable nav area — footer stays pinned below */}
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div className="nav-section">{isAdmin ? 'Admin' : 'League'}</div>
-        {nav.map(it => (
-          <div
-            key={it.path}
-            className={`nav-item${pathname === it.path || (it.path !== '/admin' && pathname.startsWith(it.path)) ? ' active' : ''}`}
-            onClick={() => navigate(it.path)}
-          >
-            <span className="icon"><Icon name={it.icon} /></span>
-            <span>{it.label}</span>
-            {it.badge && <span className="badge">{it.badge}</span>}
-          </div>
-        ))}
+        {nav.map(it => {
+          const active = pathname === it.path || (it.path !== '/admin' && pathname.startsWith(it.path));
+          return (
+            <Link
+              key={it.path}
+              to={it.path}
+              className={`nav-item${active ? ' active' : ''}`}
+              aria-current={active ? 'page' : undefined}
+              title={it.label}
+            >
+              <span className="icon"><Icon name={it.icon} /></span>
+              <span className="nav-label">{it.label}</span>
+              {it.badge && <span className="badge">{it.badge}</span>}
+            </Link>
+          );
+        })}
 
         <div className="nav-section">Account</div>
         {isAdmin ? (
-          <div className="nav-item" onClick={() => navigate('/home')}>
+          <Link to="/home" className="nav-item" title="Back to League">
             <span className="icon"><Icon name="home" /></span>
-            <span>Back to League</span>
-          </div>
+            <span className="nav-label">Back to League</span>
+          </Link>
         ) : user?.role === 'admin' && (
-          <div className="nav-item" onClick={() => navigate('/admin')}>
+          <Link to="/admin" className="nav-item" title="Admin Panel">
             <span className="icon"><Icon name="admin" /></span>
-            <span>Admin Panel</span>
-          </div>
+            <span className="nav-label">Admin Panel</span>
+          </Link>
         )}
-        <div className="nav-item" onClick={logout}>
+        <button type="button" className="nav-item" onClick={logout} title="Sign out">
           <span className="icon"><Icon name="logout" /></span>
-          <span>Sign out</span>
-        </div>
+          <span className="nav-label">Sign out</span>
+        </button>
       </div>
 
       <div className="sidebar-foot">
         <Avatar displayName={user?.display_name} size={32} isMe />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+        <div className="sidebar-foot-txt" style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
           <div style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {user?.display_name}
           </div>

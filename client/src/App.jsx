@@ -32,7 +32,7 @@ function RequireAuth({ children }) {
 
 function RequireAdmin({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return null;
+  if (loading) return <div className="loading">Loading…</div>;
   if (!user) return <Navigate to="/" replace />;
   if (user.role !== 'admin') return <Navigate to="/home" replace />;
   return children;

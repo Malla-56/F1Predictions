@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 
 const MOBILE_NAV = [
   { path: '/tips',       label: 'Tips',       icon: 'tips'  },
-  { path: '/scoreboard', label: 'Standings',  icon: 'score' },
+  { path: '/scoreboard', label: 'Scoreboard', icon: 'score' },
   { path: '/results',    label: 'Results',    icon: 'flag'  },
   { path: '/stats',      label: 'Stats',      icon: 'stats' },
 ];

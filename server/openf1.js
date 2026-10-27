@@ -4,7 +4,6 @@ const BASE = 'https://api.openf1.org/v1';
 const CACHE = new Map();
 const INFLIGHT = new Map();
 const TTL_STATIC = 24 * 60 * 60 * 1000; // 24 hours — calendar, sessions, drivers
-const TTL_LIVE   =  5 * 60 * 1000;       // 5 minutes — live race positions
 
 async function cached(key, fetcher, ttl = TTL_STATIC) {
   const hit = CACHE.get(key);
@@ -50,24 +49,26 @@ async function get(path, tries = 3) {
   }
 }
 
-async function getMeetings(year = 2026) {
+async function getMeetings(year) {
   return cached(`meetings_${year}`, () => get(`/meetings?year=${year}`));
 }
 
-async function getSprintMeetingKeys(year = 2026) {
-  const sessions = await cached(`sessions_year_${year}`, () => get(`/sessions?year=${year}`));
-  return new Set(sessions.filter(s => s.session_type === 'Sprint').map(s => s.meeting_key));
+// Note: OpenF1 marks sprints as session_type 'Race' / session_name 'Sprint', and sprint
+// qualifying as session_type 'Qualifying', so sessions are matched by session_name.
+async function getSeasonSessions(year) {
+  return cached(`sessions_year_${year}`, () => get(`/sessions?year=${year}`));
 }
 
-async function getSessions(meetingKey) {
-  return cached(`sessions_${meetingKey}`, () => get(`/sessions?meeting_key=${meetingKey}`));
-}
-
-async function getLatestSessionKey(year = 2026) {
-  const sessions = await cached(`sessions_year_${year}`, () => get(`/sessions?year=${year}`));
-  const race = sessions
-    .filter(s => s.session_type === 'Race' && !s.is_cancelled)
-    .sort((a, b) => new Date(b.date_start) - new Date(a.date_start))[0];
+// Most recent Grand Prix that has already started. The whole season's sessions are
+// published in advance, so without the date check this would pick the finale.
+async function getLatestSessionKey(year) {
+  const races = (await getSeasonSessions(year))
+    .filter(s => s.session_name === 'Race' && !s.is_cancelled)
+    .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
+  const now = new Date();
+  const started = races.filter(s => new Date(s.date_start) <= now);
+  // Before the first race, use the opener's entry list.
+  const race = started[started.length - 1] || races[0];
   return race ? race.session_key : null;
 }
 
@@ -81,11 +82,11 @@ async function getDrivers(sessionKey) {
 // back through past races until one has data.
 // The whole lookup is cached for an hour (empty results included) so it can't eat into
 // OpenF1's rate limit, which the results fetch also depends on.
-async function getStandings(kind, year = 2026) {
+async function getStandings(kind, year) {
   return cached(`standings_${kind}_${year}`, async () => {
-    const sessions = await cached(`sessions_year_${year}`, () => get(`/sessions?year=${year}`));
+    const sessions = await getSeasonSessions(year);
     const finished = sessions
-      .filter(s => s.session_type === 'Race' && !s.is_cancelled && new Date(s.date_end || s.date_start) < new Date())
+      .filter(s => s.session_name === 'Race' && !s.is_cancelled && new Date(s.date_end || s.date_start) < new Date())
       .sort((a, b) => new Date(b.date_start) - new Date(a.date_start))
       .slice(0, 2);
     for (const s of finished) {
@@ -103,92 +104,60 @@ async function getStandings(kind, year = 2026) {
 const getTeamStandings   = year => getStandings('teams', year);
 const getDriverStandings = year => getStandings('drivers', year);
 
-async function getPosition(sessionKey) {
+// Official classification, with penalties applied and DNF/DNS/DSQ flags. Not cached:
+// results are fetched only a few times per race and must pick up late penalties.
+async function getSessionResult(sessionKey) {
   if (!sessionKey) return [];
-  return cached(`position_${sessionKey}`, () => get(`/position?session_key=${sessionKey}`), TTL_LIVE);
-}
-
-async function getRaceResult(sessionKey) {
-  const positions = await getPosition(sessionKey);
-  if (!positions || positions.length === 0) return null;
-  // Group by driver, take their final position
-  const finalPos = {};
-  for (const p of positions) {
-    finalPos[p.driver_number] = p;
-  }
-  return Object.values(finalPos)
-    .sort((a, b) => a.position - b.position)
-    .slice(0, 20);
+  return get(`/session_result?session_key=${sessionKey}`);
 }
 
 function invalidate(key) {
   CACHE.delete(key);
 }
 
-// Build a structured race result for a given round by querying OpenF1.
-// Returns { finishOrder, pole, dnfs, sprintPole, sprintFinishOrder, sprintDnfs } using 3-letter driver codes.
-async function fetchAndBuildResult(round, season = 2026) {
-  const meetings = await getMeetings(season);
-  const sorted = meetings
-    .filter(m => m.meeting_key && m.circuit_short_name && !m.meeting_name?.toLowerCase().includes('testing'))
-    .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
-
-  if (round < 1 || round > sorted.length) throw new Error(`Round ${round} not found in calendar`);
-  const meeting = sorted[round - 1];
-
-  const sessions = await getSessions(meeting.meeting_key);
-
-  // Get the last Race session (actual race, not sprint race)
-  const raceSessions = sessions.filter(s => s.session_type === 'Race' && !s.is_cancelled);
-  const raceSession = raceSessions.length > 0 ? raceSessions[raceSessions.length - 1] : null;
-  const qualiSession = sessions.find(s => s.session_type === 'Qualifying'  && !s.is_cancelled);
-  const sprintSession = sessions.find(s => s.session_type === 'Sprint'     && !s.is_cancelled);
-
-  if (!raceSession) throw new Error(`No race session found for round ${round}`);
+// Build a structured race result for a calendar entry (see calendar.getCalendar).
+// Returns { finishOrder, pole, dnfs, sprintWinner, sprintFinishOrder, sprintDnfs } using 3-letter driver codes.
+async function buildResult(race) {
+  const { race: raceSession, qualifying, sprint } = race.sessions;
+  if (!raceSession) throw new Error(`No race session found for round ${race.round}`);
 
   const drivers = await getDrivers(raceSession.session_key);
   const numToCode = {};
   for (const d of drivers) numToCode[d.driver_number] = d.name_acronym;
+  const code = n => numToCode[n] || null;
 
-  const raceResult = await getRaceResult(raceSession.session_key);
-  if (!raceResult || raceResult.length === 0)
-    throw new Error(`Race result not available yet for round ${round} — try again after the race`);
-
-  const finishOrder = raceResult.map(p => numToCode[p.driver_number]).filter(Boolean);
-
-  // Drivers in the session roster but absent from the final classification are DNFs
-  const classifiedNums = new Set(raceResult.map(p => p.driver_number));
-  const dnfs = drivers
-    .filter(d => !classifiedNums.has(d.driver_number))
-    .map(d => d.name_acronym)
-    .filter(Boolean);
-
-  // Pole from qualifying P1
-  let pole = null;
-  if (qualiSession) {
-    const qualiResult = await getRaceResult(qualiSession.session_key);
-    if (qualiResult && qualiResult.length > 0)
-      pole = numToCode[qualiResult[0].driver_number] || null;
+  function classify(rows) {
+    const finishOrder = rows
+      .filter(r => r.position != null && !r.dsq)
+      .sort((a, b) => a.position - b.position)
+      .map(r => code(r.driver_number))
+      .filter(Boolean);
+    const dnfs = rows.filter(r => r.dnf || r.dns).map(r => code(r.driver_number)).filter(Boolean);
+    return { finishOrder, dnfs };
   }
 
-  // Sprint results (if sprint race exists)
-  let sprintPole = null;
+  const raceRows = await getSessionResult(raceSession.session_key);
+  if (!raceRows.length)
+    throw new Error(`Race result not available yet for round ${race.round} — try again after the race`);
+  const { finishOrder, dnfs } = classify(raceRows);
+
+  let pole = null;
+  if (qualifying) {
+    const p1 = (await getSessionResult(qualifying.session_key)).find(r => r.position === 1);
+    pole = p1 ? code(p1.driver_number) : null;
+  }
+
   let sprintFinishOrder = [];
   let sprintDnfs = [];
-  if (sprintSession) {
-    const sprintResult = await getRaceResult(sprintSession.session_key);
-    if (sprintResult && sprintResult.length > 0) {
-      sprintFinishOrder = sprintResult.map(p => numToCode[p.driver_number]).filter(Boolean);
-      sprintPole = sprintFinishOrder[0] || null;
-      const sprintClassifiedNums = new Set(sprintResult.map(p => p.driver_number));
-      sprintDnfs = drivers
-        .filter(d => !sprintClassifiedNums.has(d.driver_number))
-        .map(d => d.name_acronym)
-        .filter(Boolean);
-    }
+  if (sprint) {
+    const sprintRows = await getSessionResult(sprint.session_key);
+    if (sprintRows.length) ({ finishOrder: sprintFinishOrder, dnfs: sprintDnfs } = classify(sprintRows));
   }
 
-  return { finishOrder, pole, dnfs, sprintPole, sprintFinishOrder, sprintDnfs };
+  return { finishOrder, pole, dnfs, sprintWinner: sprintFinishOrder[0] || null, sprintFinishOrder, sprintDnfs };
 }
 
-module.exports = { getMeetings, getSessions, getLatestSessionKey, getSprintMeetingKeys, getDrivers, getTeamStandings, getDriverStandings, getPosition, getRaceResult, fetchAndBuildResult, invalidate };
+module.exports = {
+  getMeetings, getSeasonSessions, getLatestSessionKey, getDrivers,
+  getTeamStandings, getDriverStandings, getSessionResult, buildResult, invalidate,
+};

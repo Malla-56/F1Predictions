@@ -1,33 +1,23 @@
 const pool = require('./db');
-const openf1 = require('./openf1');
+const { getCalendar } = require('./calendar');
 const { sendToUser } = require('./push');
+const { SEASON } = require('./config');
 
-const SEASON = 2026;
 const HOUR = 60 * 60 * 1000;
 
 // Finds races whose tips close within the next 48h and pushes a reminder to
 // every user who hasn't tipped yet: once in the 24–48h window ("2 days") and
 // once in the 0–24h window ("1 day"). Designed to run from a once-daily cron.
 async function sendTipReminders() {
-  const meetings = await openf1.getMeetings(SEASON);
-  const sorted = meetings
-    .filter(m => m.meeting_key && m.circuit_short_name && !m.meeting_name?.toLowerCase().includes('testing'))
-    .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
-
-  const { rows: configs } = await pool.query('SELECT * FROM race_config WHERE season = $1', [SEASON]);
-  const configMap = Object.fromEntries(configs.map(c => [c.race_round, c]));
-
+  const calendar = await getCalendar(SEASON);
   const now = Date.now();
   let sent = 0;
 
-  for (let i = 0; i < sorted.length; i++) {
-    const round = i + 1;
-    const m = sorted[i];
-    const cfg = configMap[round] || {};
-    if (cfg.cancelled === 1 || cfg.manually_locked === 1) continue;
+  for (const race of calendar) {
+    if (race.isCancelled || race.isLocked) continue;
+    const { round, meeting: m } = race;
 
-    const lockTime = new Date(cfg.lock_time || m.date_start).getTime();
-    const hoursLeft = (lockTime - now) / HOUR;
+    const hoursLeft = (race.lockTime.getTime() - now) / HOUR;
     if (hoursLeft <= 0 || hoursLeft > 48) continue;
     const daysBefore = hoursLeft <= 24 ? 1 : 2;
 

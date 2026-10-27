@@ -125,3 +125,14 @@ CREATE TABLE IF NOT EXISTS user_passkeys (
   last_used_at  TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS user_passkeys_user_id_idx ON user_passkeys(user_id);
+
+-- Pins each round number to an OpenF1 meeting the first time it is seen, so meetings
+-- added or removed mid-season can't renumber stored predictions/results.
+-- (Also created automatically by server/calendar.js on first use.)
+CREATE TABLE IF NOT EXISTS race_rounds (
+  season      INTEGER NOT NULL,
+  round       INTEGER NOT NULL,
+  meeting_key INTEGER NOT NULL,
+  PRIMARY KEY (season, round),
+  UNIQUE (season, meeting_key)
+);

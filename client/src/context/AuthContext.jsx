@@ -13,7 +13,8 @@ export function AuthProvider({ children }) {
     if (!token) { setLoading(false); return; }
     api.auth.me()
       .then(setUser)
-      .catch(() => localStorage.removeItem('token'))
+      // Only a rejected token logs you out — a network blip shouldn't.
+      .catch(err => { if (err.status === 401 || err.status === 404) localStorage.removeItem('token'); })
       .finally(() => setLoading(false));
   }, []);
 

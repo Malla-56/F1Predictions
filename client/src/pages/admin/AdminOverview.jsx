@@ -15,18 +15,18 @@ export default function AdminOverview() {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Admin Overview</h2>
-            <div className="muted" style={{ marginTop: 6 }}>League management · Pulse Pitlane Picks</div>
+            <h2 className="page-title">Admin Overview</h2>
+            <div className="page-sub">League management · Pulse Pitlane Picks</div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 700 }}>
+        <div className="kpi-row">
           <Stat label="Active Users" value={stats?.userCount ?? '—'} />
           <Stat label="Predictions" value={stats?.predCount ?? '—'} />
           <Stat label="Scored Rounds" value={stats?.scoredRounds ?? '—'} />
         </div>
 
-        <div className="card" style={{ padding: '22px 24px', marginTop: 24, maxWidth: 600 }}>
+        <div className="card" style={{ padding: '22px 24px', marginTop: 24 }}>
           <div className="mono" style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 14 }}>Admin Actions</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="mono" style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>

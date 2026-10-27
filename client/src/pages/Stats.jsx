@@ -9,13 +9,16 @@ export default function Stats() {
   const { races } = useAppData();
   const [standings, setStandings] = useState([]);
   const [opponent, setOpponent] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
     api.scores.leaderboard().then(rows => {
       setStandings(rows);
       const notMe = rows.find(r => !r.isMe);
       if (notMe) setOpponent(notMe.userId);
-    }).catch(() => {});
+    }).catch(e => setLoadError(e.message))
+      .finally(() => setLoaded(true));
   }, []);
 
   const completedRaces = races.filter(r => r.status === 'done');
@@ -28,7 +31,11 @@ export default function Stats() {
       <>
         <Topbar crumbs={['Pulse League', 'Your Stats']} />
         <div className="content">
-          <div className="loading">No race data yet — stats will appear after the first scored round.</div>
+          <div className="loading">
+            {!loaded ? 'Loading stats…'
+              : loadError ? `Couldn't load stats: ${loadError}`
+              : 'No race data yet — stats will appear after the first scored round.'}
+          </div>
         </div>
       </>
     );
@@ -57,8 +64,8 @@ export default function Stats() {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Your Stats</h2>
-            <div className="muted" style={{ marginTop: 6 }}>{completedRaces.length} rounds analysed · season form vs league average</div>
+            <h2 className="page-title">Your Stats</h2>
+            <div className="page-sub">{completedRaces.length} rounds analysed · season form vs league average</div>
           </div>
         </div>
 
@@ -77,7 +84,6 @@ export default function Stats() {
                 { name: 'You', color: 'var(--red)', values: myPoints, dotted: false },
                 { name: 'Avg', color: 'var(--text-3)', values: avgPoints, dotted: true },
               ]}
-              height={280}
             />
           </div>
 
@@ -113,6 +119,7 @@ export default function Stats() {
             <div className="panel-hd">
               <h3>Head-to-Head</h3>
               <select
+                aria-label="Head-to-head opponent"
                 className="btn ghost"
                 style={{ padding: '0 12px', height: 34, fontFamily: 'var(--display)' }}
                 value={opponent || ''}
@@ -129,7 +136,7 @@ export default function Stats() {
                   races={completedRaces}
                   series={[
                     { name: 'You', color: 'var(--red)', values: myPoints },
-                    { name: opp.displayName, color: '#3a7bff', values: oppPoints },
+                    { name: opp.displayName, color: 'var(--blue)', values: oppPoints },
                   ]}
                   height={240}
                 />

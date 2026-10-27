@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
+import { Fragment } from 'react';
 
 export default function AdminPolls({ setToast }) {
   const [polls, setPolls] = useState([]);
@@ -12,7 +13,7 @@ export default function AdminPolls({ setToast }) {
   const [creating, setCreating] = useState(false);
 
   function load() {
-    api.polls.list().then(setPolls).catch(() => {});
+    api.polls.list().then(setPolls).catch(err => setToast(`Error loading polls: ${err.message}`));
   }
 
   useEffect(load, []);
@@ -77,9 +78,13 @@ export default function AdminPolls({ setToast }) {
   }
 
   async function closePoll(poll) {
-    await api.polls.update(poll.id, { is_active: false });
-    setToast('Poll closed');
-    load();
+    try {
+      await api.polls.update(poll.id, { is_active: false });
+      setToast('Poll closed');
+      load();
+    } catch (err) {
+      setToast(`Error: ${err.message}`);
+    }
   }
 
   async function reopen(poll) {
@@ -114,20 +119,22 @@ export default function AdminPolls({ setToast }) {
         {/* Header */}
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em' }}>Polls</h2>
-            <div className="muted" style={{ marginTop: 6 }}>
+            <h2 className="page-title">Polls</h2>
+            <div className="page-sub">
               {activePoll ? '1 active' : 'No active poll'} · {polls.length} total
             </div>
           </div>
         </div>
 
+        <div className="admin-split" style={{ marginBottom: 28 }}>
         {/* Create form */}
-        <div className="card" style={{ padding: '22px 24px', marginBottom: 28 }}>
+        <div className="card" style={{ padding: '22px 24px' }}>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 16 }}>CREATE POLL</div>
           <form onSubmit={create}>
             <div className="fld">
-              <label>Question</label>
+              <label htmlFor="poll-question">Question</label>
               <input
+                id="poll-question"
                 type="text"
                 placeholder="Ask the community something…"
                 value={question}
@@ -141,6 +148,7 @@ export default function AdminPolls({ setToast }) {
                   <div className="fld" style={{ flex: 1, marginBottom: 0 }}>
                     <input
                       type="text"
+                      aria-label={`Option ${i + 1}`}
                       placeholder={`Option ${i + 1}`}
                       value={opt.label}
                       onChange={e => setOptionLabel(opt.id, e.target.value)}
@@ -152,6 +160,7 @@ export default function AdminPolls({ setToast }) {
                       className="btn danger"
                       style={{ height: 36, padding: '0 12px', flexShrink: 0 }}
                       onClick={() => removeOption(opt.id)}
+                      aria-label={`Remove option ${i + 1}`}
                     >
                       ✕
                     </button>
@@ -186,11 +195,11 @@ export default function AdminPolls({ setToast }) {
 
         {/* Active poll */}
         {activePoll && (
-          <>
-            <div className="sec-head">
+          <div>
+            <div className="sec-head" style={{ marginTop: 0 }}>
               <h2>Active Poll</h2>
             </div>
-            <div className="card" style={{ padding: '22px 24px', marginBottom: 28, borderColor: 'var(--red)' }}>
+            <div className="card" style={{ padding: '22px 24px', borderColor: 'var(--red)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, gap: 12 }}>
                 <div>
                   <div style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 16, marginBottom: 6 }}>
@@ -230,8 +239,9 @@ export default function AdminPolls({ setToast }) {
                 })}
               </div>
             </div>
-          </>
+          </div>
         )}
+        </div>
 
         {/* History */}
         {history.length > 0 && (
@@ -254,13 +264,21 @@ export default function AdminPolls({ setToast }) {
                 </thead>
                 <tbody>
                   {history.map(p => (
-                    <>
+                    <Fragment key={p.id}>
                       <tr
-                        key={p.id}
                         style={{ cursor: 'pointer' }}
                         onClick={() => setExpanded(expanded === p.id ? null : p.id)}
+                        tabIndex={0}
+                        aria-expanded={expanded === p.id}
+                        onKeyDown={e => {
+                          if (e.target !== e.currentTarget) return;
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setExpanded(expanded === p.id ? null : p.id);
+                          }
+                        }}
                       >
-                        <td style={{ fontWeight: 500, maxWidth: 260 }}>{p.question}</td>
+                        <td style={{ fontWeight: 500, minWidth: 220 }}>{p.question}</td>
                         <td className="mono" style={{ fontSize: 12 }}>{p.options.length}</td>
                         <td className="mono" style={{ fontSize: 12 }}>{totalVotes(p)}</td>
                         <td style={{ fontSize: 13 }}>{winner(p)}</td>
@@ -292,9 +310,9 @@ export default function AdminPolls({ setToast }) {
                         </td>
                       </tr>
                       {expanded === p.id && (
-                        <tr key={`${p.id}-exp`}>
+                        <tr>
                           <td colSpan={7} style={{ padding: '16px 22px', background: 'var(--surface-2)' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 420 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px 28px' }}>
                               {p.options.map(opt => {
                                 const votes = getVotes(p, opt.id);
                                 const total = totalVotes(p);
@@ -320,7 +338,7 @@ export default function AdminPolls({ setToast }) {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

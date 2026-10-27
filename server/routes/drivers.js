@@ -1,6 +1,7 @@
 const express = require('express');
 const openf1 = require('../openf1');
 const requireAuth = require('../middleware/auth');
+const { SEASON } = require('../config');
 
 const router = express.Router();
 
@@ -31,12 +32,12 @@ function teamColor(teamName) {
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const sessionKey = await openf1.getLatestSessionKey(2026);
+    const sessionKey = await openf1.getLatestSessionKey(SEASON);
     const drivers = await openf1.getDrivers(sessionKey);
     // Standings are a nice-to-have for ordering pickers — never fail the driver list over them.
     const [teamStandings, driverStandings] = await Promise.all([
-      openf1.getTeamStandings(2026).catch(() => []),
-      openf1.getDriverStandings(2026).catch(() => []),
+      openf1.getTeamStandings(SEASON).catch(() => []),
+      openf1.getDriverStandings(SEASON).catch(() => []),
     ]);
     const teamRank = new Map(teamStandings.map(t => [t.team_name, t.position_current]));
     const driverRank = new Map(driverStandings.map(d => [d.driver_number, d.position_current]));

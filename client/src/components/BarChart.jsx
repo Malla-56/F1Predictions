@@ -1,11 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useLayoutEffect } from 'react';
+
+const MIN_LABEL_STEP = 28;
 
 export default function BarChart({ races, series, height = 200 }) {
-  const [w, setW] = useState(540);
+  const [w, setW] = useState(0);
   const ref = useRef(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!ref.current) return;
+    setW(ref.current.getBoundingClientRect().width);
     const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
     ro.observe(ref.current);
     return () => ro.disconnect();
@@ -17,10 +20,11 @@ export default function BarChart({ races, series, height = 200 }) {
   const max = Math.max(20, Math.ceil(Math.max(...series.flatMap(s => s.values)) / 10) * 10);
   const groupW = innerW / Math.max(1, races.length);
   const barW = (groupW - 8) / series.length;
+  const labelEvery = Math.max(1, Math.ceil(MIN_LABEL_STEP / Math.max(1, groupW)));
 
   return (
     <div ref={ref} style={{ width: '100%' }}>
-      <svg width={w} height={height} style={{ display: 'block', overflow: 'visible' }}>
+      <svg width={Math.max(w, 1)} height={height} style={{ display: 'block', overflow: 'visible' }}>
         {[0, 0.5, 1].map((p, i) => (
           <line key={i} x1={padL} y1={padT + innerH * p} x2={padL + innerW} y2={padT + innerH * p}
                 stroke="var(--line)" />
@@ -45,10 +49,12 @@ export default function BarChart({ races, series, height = 200 }) {
                   </rect>
                 );
               })}
-              <text x={gx + (barW * series.length) / 2} y={padT + innerH + 18}
-                    fontFamily="var(--mono)" fontSize="10" fill="var(--text-3)" textAnchor="middle">
-                R{String(r.round).padStart(2, '0')}
-              </text>
+              {i % labelEvery === 0 && (
+                <text x={gx + (barW * series.length) / 2} y={padT + innerH + 18}
+                      fontFamily="var(--mono)" fontSize="10" fill="var(--text-3)" textAnchor="middle">
+                  R{String(r.round).padStart(2, '0')}
+                </text>
+              )}
             </g>
           );
         })}

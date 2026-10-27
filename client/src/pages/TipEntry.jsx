@@ -6,6 +6,7 @@ import Topbar from '../components/Topbar';
 import DriverChip from '../components/DriverChip';
 import DriverPicker from '../components/DriverPicker';
 import Icon from '../components/Icon';
+import Modal from '../components/Modal';
 
 function SlotRow({ label, tone, driverId, hint, locked, onOpen, onClear }) {
   return (
@@ -29,8 +30,9 @@ function SlotRow({ label, tone, driverId, hint, locked, onOpen, onClear }) {
 export default function TipEntry({ setToast }) {
   const { round } = useParams();
   const navigate = useNavigate();
-  const { races, countryFlag } = useAppData();
+  const { races, countryFlag, loading: racesLoading } = useAppData();
   const race = races.find(r => r.round === parseInt(round));
+  const notFound = !racesLoading && races.length > 0 && !race;
 
   const [top10, setTop10] = useState(Array(10).fill(null));
   const [pole, setPole] = useState(null);
@@ -40,18 +42,24 @@ export default function TipEntry({ setToast }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [scoringRules, setScoringRules] = useState([]);
+  // Saving is blocked until the existing tip has loaded, so a failed load can't
+  // overwrite saved picks with an empty form.
+  const [loadState, setLoadState] = useState('loading');
 
   useEffect(() => {
     if (!round) return;
+    let stale = false;
+    setLoadState('loading');
     api.predictions.mine(parseInt(round)).then(pred => {
-      if (pred) {
-        setTop10(pred.positions || Array(10).fill(null));
-        setPole(pred.pole || null);
-        setDnf(pred.dnf || null);
-        setSprintWinner(pred.sprintWinner || null);
-      }
-    }).catch(() => {});
-    api.admin.scoring().then(setScoringRules).catch(() => {});
+      if (stale) return;
+      setTop10(pred?.positions || Array(10).fill(null));
+      setPole(pred?.pole || null);
+      setDnf(pred?.dnf || null);
+      setSprintWinner(pred?.sprintWinner || null);
+      setLoadState('ready');
+    }).catch(() => { if (!stale) setLoadState('error'); });
+    api.scores.rules().then(rules => { if (!stale) setScoringRules(rules); }).catch(() => {});
+    return () => { stale = true; };
   }, [round]);
 
   const pts = (key, fallback) => scoringRules.find(r => r.rule_key === key)?.points ?? fallback;
@@ -98,7 +106,7 @@ export default function TipEntry({ setToast }) {
 
   const filledCount = slots.filter(s => valueOf(s.key)).length;
   const valid = filledCount === slots.length;
-  const isLocked = race?.isLocked;
+  const isLocked = race?.isLocked || loadState !== 'ready';
 
   async function lockIn() {
     setSaving(true);
@@ -126,6 +134,18 @@ export default function TipEntry({ setToast }) {
   const crumbs = ['Pulse League', 'Tip Entry', race ? `R${String(race.round).padStart(2,'0')} · ${race.name}` : '…'];
   const isCancelled = race?.isCancelled;
 
+  if (notFound) {
+    return (
+      <>
+        <Topbar crumbs={crumbs} />
+        <div className="content">
+          <div className="results-empty">Round {round} isn't on this season's calendar.</div>
+          <button className="btn ghost" onClick={() => navigate('/home')}>Back to home →</button>
+        </div>
+      </>
+    );
+  }
+
   if (isCancelled) {
     return (
       <>
@@ -136,18 +156,18 @@ export default function TipEntry({ setToast }) {
               <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>
                 R{String(parseInt(round)).padStart(2,'0')} · Cancelled
               </div>
-              <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em', margin: 0 }}>
+              <h2 className="page-title">
                 {race?.name || 'Loading…'}{' '}
                 <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>· {race ? countryFlag(race.countryCode) : ''}</span>
               </h2>
-              <div className="muted" style={{ marginTop: 6 }}>{race?.circuit}</div>
+              <div className="page-sub">{race?.circuit}</div>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <button className="btn ghost" onClick={() => navigate('/home')}>← Back</button>
             </div>
           </div>
 
-          <div className="card" style={{ padding: '14px 18px', marginBottom: 18, borderColor: 'rgba(225,6,0,0.4)', background: 'var(--red-dim)' }}>
+          <div className="card" style={{ padding: '14px 18px', marginBottom: 18, borderColor: 'var(--red-line)', background: 'var(--red-dim)' }}>
             <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)', letterSpacing: '0.08em' }}>
               ✗ THIS RACE HAS BEEN CANCELLED — NO TIPS REQUIRED
             </span>
@@ -191,21 +211,23 @@ export default function TipEntry({ setToast }) {
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>
               R{String(parseInt(round)).padStart(2,'0')} · Tip Entry
             </div>
-            <h2 style={{ fontFamily: 'var(--display)', fontSize: 30, fontWeight: 700, letterSpacing: '-0.01em', margin: 0 }}>
+            <h2 className="page-title">
               {race?.name || 'Loading…'}{' '}
               <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>· {race ? countryFlag(race.countryCode) : ''}</span>
             </h2>
-            <div className="muted" style={{ marginTop: 6 }}>{race?.circuit}</div>
+            <div className="page-sub">{race?.circuit}</div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <button className="btn ghost" onClick={() => navigate('/home')}>← Back</button>
           </div>
         </div>
 
-        {isLocked && (
-          <div className="card" style={{ padding: '14px 18px', marginBottom: 18, borderColor: 'rgba(225,6,0,0.4)', background: 'var(--red-dim)' }}>
+        {isLocked && loadState !== 'loading' && (
+          <div className="card" style={{ padding: '14px 18px', marginBottom: 18, borderColor: 'var(--red-line)', background: 'var(--red-dim)' }}>
             <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)', letterSpacing: '0.08em' }}>
-              ✗ TIPS ARE LOCKED FOR THIS RACE — READ ONLY VIEW
+              {loadState === 'error'
+                ? '✗ COULDN\'T LOAD YOUR SAVED TIPS — REFRESH TO TRY AGAIN'
+                : '✗ TIPS ARE LOCKED FOR THIS RACE — READ ONLY VIEW'}
             </span>
           </div>
         )}
@@ -226,6 +248,7 @@ export default function TipEntry({ setToast }) {
             <div className="slot-list">{slots.filter(s => typeof s.key === 'number').map(row)}</div>
           </div>
 
+          <div className="entry-side">
           <div className="entry-card">
             <h3>Bonus picks</h3>
             <div className="slot-list">{slots.filter(s => typeof s.key === 'string').map(row)}</div>
@@ -253,6 +276,7 @@ export default function TipEntry({ setToast }) {
               </button>
             </div>
           )}
+          </div>
         </div>
       </div>
 
@@ -271,9 +295,8 @@ export default function TipEntry({ setToast }) {
       )}
 
       {showConfirm && (
-        <div className="modal-bg" onClick={() => setShowConfirm(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>Submit your tips?</h3>
+        <Modal onClose={() => setShowConfirm(false)} labelledBy="tip-confirm-title">
+            <h3 id="tip-confirm-title">Submit your tips?</h3>
             <p className="muted">Once locked, picks for {race?.name} can't be changed.</p>
             <div className="modal-summary">
               <div className="item">
@@ -295,8 +318,7 @@ export default function TipEntry({ setToast }) {
                 {saving ? 'Saving…' : 'Confirm submit →'}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

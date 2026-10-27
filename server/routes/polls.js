@@ -46,7 +46,8 @@ router.post('/:id/vote', requireAuth, async (req, res) => {
     );
     if (!poll) return res.status(409).json({ error: 'Poll is not active' });
 
-    if (!poll.options.some(o => o.id === option_id)) {
+    const option = poll.options.find(o => String(o.id) === String(option_id));
+    if (!option) {
       return res.status(400).json({ error: 'Invalid option' });
     }
 
@@ -54,14 +55,14 @@ router.post('/:id/vote', requireAuth, async (req, res) => {
       INSERT INTO poll_votes (poll_id, user_id, option_id)
       VALUES ($1, $2, $3)
       ON CONFLICT (poll_id, user_id) DO UPDATE SET option_id = EXCLUDED.option_id, voted_at = NOW()
-    `, [pollId, req.user.id, option_id]);
+    `, [pollId, req.user.id, option.id]);
 
     const { rows: votes } = await pool.query(
       'SELECT option_id, COUNT(*)::int as votes FROM poll_votes WHERE poll_id = $1 GROUP BY option_id',
       [pollId]
     );
 
-    res.json({ ok: true, results: votes, user_vote: option_id });
+    res.json({ ok: true, results: votes, user_vote: option.id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
