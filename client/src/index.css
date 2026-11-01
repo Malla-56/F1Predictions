@@ -851,6 +851,40 @@ a { color: inherit; text-decoration: none; }
   font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
 }
 
+/* Auth splash — shown while a saved token is being verified */
+.auth-splash-inner {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  animation: auth-splash-in 0.3s ease-out 0.15s both;
+}
+.auth-splash-mark { width: 44px; height: 44px; animation: auth-splash-pulse 1.2s ease-in-out infinite; }
+.auth-splash-bar {
+  width: 140px; height: 3px; overflow: hidden;
+  background: var(--red-dim); border-radius: 2px;
+}
+.auth-splash-bar span {
+  display: block; width: 40%; height: 100%;
+  background: var(--red);
+  animation: auth-splash-slide 1.1s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.auth-splash-label {
+  color: var(--text-3); font-size: 11px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+}
+@keyframes auth-splash-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes auth-splash-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.88); opacity: 0.7; }
+}
+@keyframes auth-splash-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-splash-mark, .auth-splash-bar span { animation: none; }
+  .auth-splash-bar span { width: 100%; opacity: 0.6; }
+}
+
 /* Mobile app mode — bottom tab navigation, no sidebar/admin */
 .app-mobile {
   display: block;

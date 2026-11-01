@@ -41,7 +41,7 @@ function RequireAdmin({ children }) {
 }
 
 function AppShell() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const isMobile = useIsMobile();
   const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
@@ -57,6 +57,19 @@ function AppShell() {
     const t = setTimeout(() => setToast(null), 2400);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // Still checking a saved token — don't flash the login form at someone who's already signed in.
+  if (loading) {
+    return (
+      <div className="login-bg auth-splash" role="status" aria-label="Checking your session">
+        <div className="auth-splash-inner">
+          <div className="brand-mark auth-splash-mark" />
+          <div className="auth-splash-bar"><span /></div>
+          <div className="auth-splash-label mono">Warming up</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
