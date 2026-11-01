@@ -235,7 +235,7 @@ function TipCard({ prediction: p, isMe, raceName, raceIsLocked, onViewFull, navi
 
       <div className="tipcard-foot">
         <span>{revealed ? 'Submitted' : 'Picks revealed at lock'}</span>
-        {revealed && <span>↗ Click for full picks</span>}
+        {revealed && <span>↗ Full picks</span>}
       </div>
     </div>
   );

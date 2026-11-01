@@ -955,6 +955,27 @@ a { color: inherit; text-decoration: none; }
 .app-mobile .sec-head { flex-wrap: wrap; gap: 10px; margin: 8px 0 14px; }
 .app-mobile .sec-head h2,
 .app-mobile .sec-head .page-title { font-size: 22px; }
+/* Home on phones — compact hero, one tip card per row with picks in a 2×2 grid */
+.app-mobile .hero-left { padding: 18px 18px 18px 22px; gap: 10px; }
+.app-mobile .hero-meta { gap: 8px; letter-spacing: 0.12em; flex-wrap: wrap; }
+.app-mobile .hero-title { font-size: 26px; }
+.app-mobile .hero-circuit { gap: 8px; font-size: 13px; flex-wrap: wrap; }
+.app-mobile .hero-actions .btn { width: 100%; justify-content: center; height: 46px; }
+.app-mobile .hero-right { padding: 16px 18px; }
+.app-mobile .countdown { gap: 6px; }
+.app-mobile .countdown .seg { padding: 8px 4px; }
+.app-mobile .countdown .num { font-size: 22px; }
+.app-mobile .tipgrid { grid-template-columns: 1fr; gap: 10px; }
+.app-mobile .tipcard { padding: 14px; gap: 10px; }
+.app-mobile .tipcard.clickable:hover { transform: none; }
+.app-mobile .tipcard.clickable:active { background: var(--surface-2); }
+.app-mobile .tipcard-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding-top: 10px; }
+.app-mobile .pickrow { grid-template-columns: 34px minmax(0, 1fr); gap: 6px; min-width: 0; }
+.app-mobile .pickrow .driver-chip { min-width: 0; overflow: hidden; }
+.app-mobile .pickrow .driver-chip .num { display: none; }
+.app-mobile .pickrow .driver-chip .lname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-mobile .tipcard-foot { margin-top: 0; }
+
 .app-mobile .modal-bg { padding: 0; align-items: flex-end; }
 .app-mobile .modal {
   width: 100%; border-radius: 12px 12px 0 0;

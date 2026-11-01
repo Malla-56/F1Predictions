@@ -3,6 +3,7 @@ import Icon from './Icon';
 import { useAuth } from '../context/AuthContext';
 
 const MOBILE_NAV = [
+  { path: '/home',       label: 'Home',       icon: 'home'  },
   { path: '/tips',       label: 'Tips',       icon: 'tips'  },
   { path: '/scoreboard', label: 'Scoreboard', icon: 'score' },
   { path: '/results',    label: 'Results',    icon: 'flag'  },

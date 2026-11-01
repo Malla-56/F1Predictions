@@ -80,7 +80,7 @@ function AppShell() {
     );
   }
 
-  // Mobile mode: leaderboard, tips and results only — no admin, no desktop sidebar.
+  // Mobile mode: home, tips, results and leaderboard only — no admin, no desktop sidebar.
   if (isMobile) {
     return (
       <AppDataProvider>
@@ -90,12 +90,13 @@ function AppShell() {
             <PasskeyPrompt setToast={setToast} />
             <NotifyPrompt setToast={setToast} />
             <Routes>
+              <Route path="/home" element={<Home setToast={setToast} theme={theme} setTheme={setTheme} />} />
               <Route path="/tips" element={<MyTips />} />
               <Route path="/predict/:round" element={<TipEntry setToast={setToast} />} />
               <Route path="/results" element={<Results setToast={setToast} />} />
               <Route path="/scoreboard" element={<Scoreboard />} />
               <Route path="/stats" element={<Stats />} />
-              <Route path="*" element={<Navigate to="/tips" replace />} />
+              <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           </main>
         </div>
