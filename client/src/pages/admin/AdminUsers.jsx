@@ -20,7 +20,7 @@ function TimeAgo({ iso }) {
 }
 
 export default function AdminUsers({ setToast }) {
-  const { user: me } = useAuth();
+  const { user: me, activeLeague } = useAuth();
   const [users, setUsers] = useState([]);
   const [resetTarget, setResetTarget] = useState(null);
   const [newPassword, setNewPassword] = useState('');
@@ -44,18 +44,19 @@ export default function AdminUsers({ setToast }) {
     }
   }
 
+  // Removing only affects this league; their account and other leagues are untouched.
   function kick(user) {
-    if (!window.confirm(`Kick ${user.display_name}? They will no longer be able to log in.`)) return;
-    update(user, { is_active: 0 }, `${user.display_name} deactivated`);
+    if (!window.confirm(`Remove ${user.display_name} from ${activeLeague?.name}? Their scores stay but they'll no longer see or appear in this league.`)) return;
+    update(user, { is_active: 0 }, `${user.display_name} removed from the league`);
   }
 
   function reactivate(user) {
-    update(user, { is_active: 1 }, `${user.display_name} reactivated`);
+    update(user, { is_active: 1 }, `${user.display_name} restored`);
   }
 
   function toggleAdmin(user) {
-    const newRole = user.role === 'admin' ? 'user' : 'admin';
-    update(user, { role: newRole }, `${user.display_name} is now ${newRole}`);
+    const newRole = user.role === 'admin' ? 'member' : 'admin';
+    update(user, { role: newRole }, `${user.display_name} is now a league ${newRole}`);
   }
 
   function openReset(user) {
@@ -101,8 +102,11 @@ export default function AdminUsers({ setToast }) {
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
-            <h2 className="page-title">Users</h2>
-            <div className="page-sub">{users.filter(u => u.is_active).length} active · {users.length} total</div>
+            <h2 className="page-title">Members</h2>
+            <div className="page-sub">
+              {users.filter(u => u.is_active).length} in {activeLeague?.name} · {users.filter(u => !u.is_active).length} removed
+              · add players with an invite code from the Leagues page
+            </div>
           </div>
         </div>
 
@@ -114,7 +118,7 @@ export default function AdminUsers({ setToast }) {
                 <th>Username</th>
                 <th>Role</th>
                 <th>Predictions</th>
-                <th>Joined</th>
+                <th>Joined League</th>
                 <th title="Last password or Face ID sign-in">Last Login</th>
                 <th title="Last time they used the app (sessions stay signed in for 30 days)">Last Active</th>
                 <th>Status</th>
@@ -141,7 +145,7 @@ export default function AdminUsers({ setToast }) {
                   <td className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}><TimeAgo iso={u.last_login_at} /></td>
                   <td className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}><TimeAgo iso={u.last_seen_at} /></td>
                   <td>
-                    <span className={`badge dot ${u.is_active ? 'done' : 'pending'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
+                    <span className={`badge dot ${u.is_active ? 'done' : 'pending'}`}>{u.is_active ? 'Active' : 'Removed'}</span>
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -149,14 +153,16 @@ export default function AdminUsers({ setToast }) {
                         {u.role === 'admin' ? 'Demote' : 'Make Admin'}
                       </button>
                       {u.is_active
-                        ? <button className="btn danger" style={{ height: 30, padding: '0 10px', fontSize: 12 }} onClick={() => kick(u)}>Kick</button>
+                        ? <button className="btn danger" style={{ height: 30, padding: '0 10px', fontSize: 12 }} onClick={() => kick(u)}>Remove</button>
                         : <button className="btn" style={{ height: 30, padding: '0 10px', fontSize: 12 }} onClick={() => reactivate(u)}>Restore</button>
                       }
                       <button
                         className="btn"
                         style={{ height: 30, padding: '0 10px', fontSize: 12 }}
-                        disabled={u.id === me?.id}
-                        title={u.id === me?.id ? 'Cannot reset your own password here' : 'Reset password'}
+                        disabled={u.id === me?.id || !u.can_manage}
+                        title={u.id === me?.id ? 'Cannot reset your own password here'
+                          : !u.can_manage ? "They're also in a league you don't run — ask the site manager"
+                          : 'Reset password'}
                         onClick={() => openReset(u)}
                       >
                         Reset PW

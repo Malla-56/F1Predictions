@@ -55,7 +55,7 @@ export default function Home({ setToast, theme, setTheme }) {
     if (!racesLoading) msg = racesError ? `Error: ${racesError}` : 'No upcoming races found.';
     return (
       <>
-        <Topbar crumbs={['Pulse League', 'Home']} right={topbarRight} />
+        <Topbar crumbs={['Home']} right={topbarRight} />
         <div className="content"><div className="loading">{msg}</div></div>
       </>
     );
@@ -63,7 +63,7 @@ export default function Home({ setToast, theme, setTheme }) {
 
   return (
     <>
-      <Topbar crumbs={['Pulse League', 'Home']} right={topbarRight} />
+      <Topbar crumbs={['Home']} right={topbarRight} />
       <div className="content">
         <div className="home-top">
         <div className="hero">

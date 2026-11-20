@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import Avatar from './Avatar';
 import { useAuth } from '../context/AuthContext';
@@ -16,18 +16,26 @@ const ADMIN_NAV = [
   { path: '/admin/users',   label: 'Users',     icon: 'users'   },
   { path: '/admin/scoring', label: 'Scoring',   icon: 'scoring' },
   { path: '/admin/races',   label: 'Races',     icon: 'races'   },
-  { path: '/admin/results', label: 'Results',   icon: 'results' },
-  { path: '/admin/import',  label: 'Import',    icon: 'import'  },
+  // Shared by every league, so only the site manager sees these.
+  { path: '/admin/results', label: 'Results',   icon: 'results', siteOnly: true },
+  { path: '/admin/import',  label: 'Import',    icon: 'import',  siteOnly: true },
   { path: '/admin/data',    label: 'Data',      icon: 'data'    },
   { path: '/admin/polls',   label: 'Polls',     icon: 'admin'   },
 ];
 
 export default function Sidebar() {
-  const { user, logout } = useAuth();
+  const { user, logout, leagues, activeLeague, switchLeague, isLeagueAdmin, isSiteManager } = useAuth();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   const isAdmin = pathname.startsWith('/admin');
-  const nav = isAdmin ? ADMIN_NAV : USER_NAV;
+  const nav = isAdmin ? ADMIN_NAV.filter(it => !it.siteOnly || isSiteManager) : USER_NAV;
+
+  function changeLeague(id) {
+    switchLeague(Number(id));
+    // You may not be an admin of the other league, so leave the admin pages.
+    if (isAdmin) navigate('/home');
+  }
 
   return (
     <aside className="sidebar">
@@ -38,6 +46,19 @@ export default function Sidebar() {
           <div className="row2">Pitlane Picks</div>
         </div>
       </div>
+
+      {leagues.length > 1 ? (
+        <select
+          className="league-switch"
+          aria-label="League"
+          value={activeLeague?.id}
+          onChange={e => changeLeague(e.target.value)}
+        >
+          {leagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      ) : (
+        <div className="league-switch league-switch-single">{activeLeague?.name}</div>
+      )}
 
       {/* Scrollable nav area — footer stays pinned below */}
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -60,12 +81,16 @@ export default function Sidebar() {
         })}
 
         <div className="nav-section">Account</div>
+        <Link to="/leagues" className={`nav-item${pathname === '/leagues' ? ' active' : ''}`} title="Leagues">
+          <span className="icon"><Icon name="users" /></span>
+          <span className="nav-label">Leagues</span>
+        </Link>
         {isAdmin ? (
           <Link to="/home" className="nav-item" title="Back to League">
             <span className="icon"><Icon name="home" /></span>
             <span className="nav-label">Back to League</span>
           </Link>
-        ) : user?.role === 'admin' && (
+        ) : (isLeagueAdmin || isSiteManager) && (
           <Link to="/admin" className="nav-item" title="Admin Panel">
             <span className="icon"><Icon name="admin" /></span>
             <span className="nav-label">Admin Panel</span>
@@ -84,7 +109,7 @@ export default function Sidebar() {
             {user?.display_name}
           </div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
-            {user?.role === 'admin' ? 'Admin' : 'Tipper'}
+            {isSiteManager ? 'Site manager' : isLeagueAdmin ? 'League admin' : 'Tipper'}
           </div>
         </div>
       </div>

@@ -230,7 +230,75 @@ async function buildResult(race) {
   return { finishOrder, pole, dnfs, sprintWinner: sprintFinishOrder[0] || null, sprintFinishOrder, sprintDnfs };
 }
 
+// Extra race data that fantasy scoring uses, for a calendar entry. Each part is fetched
+// on its own and simply left out if OpenF1 doesn't have it, so one gap doesn't lose the rest.
+// Returns any of { teams, grid, fastestLap, fastestPit, overtakes } using 3-letter driver codes.
+async function buildFantasyStats(race) {
+  const { race: raceSession, qualifying } = race.sessions;
+  if (!raceSession) return {};
+
+  const drivers = await getDrivers(raceSession.session_key);
+  const numToCode = {};
+  const teams = {};
+  for (const d of drivers) {
+    numToCode[d.driver_number] = d.name_acronym;
+    teams[d.name_acronym] = d.team_name;
+  }
+  const code = n => numToCode[n] || null;
+  const stats = {};
+  if (drivers.length) stats.teams = teams;
+
+  const part = async (name, build) => {
+    try {
+      const value = await build();
+      if (value != null) stats[name] = value;
+    } catch (err) {
+      console.warn(`[openf1] R${race.round} fantasy ${name} unavailable: ${err.message}`);
+    }
+  };
+
+  // The grid is published against the qualifying session, not the race.
+  if (qualifying) {
+    await part('grid', async () => {
+      const rows = await get(`/starting_grid?session_key=${qualifying.session_key}`);
+      const grid = {};
+      for (const r of rows) if (code(r.driver_number) && r.position) grid[code(r.driver_number)] = r.position;
+      return Object.keys(grid).length ? grid : null;
+    });
+  }
+
+  await part('fastestLap', async () => {
+    const laps = (await get(`/laps?session_key=${raceSession.session_key}`))
+      .filter(l => l.lap_duration > 0 && code(l.driver_number));
+    if (!laps.length) return null;
+    return code(laps.reduce((best, l) => (l.lap_duration < best.lap_duration ? l : best)).driver_number);
+  });
+
+  await part('fastestPit', async () => {
+    // Under a second and a half isn't a real stop (drive-throughs, timing glitches).
+    const stops = (await get(`/pit?session_key=${raceSession.session_key}`))
+      .filter(p => p.stop_duration >= 1.5 && code(p.driver_number));
+    if (!stops.length) return null;
+    const best = stops.reduce((a, b) => (b.stop_duration < a.stop_duration ? b : a));
+    const driver = code(best.driver_number);
+    return { driver, team: teams[driver], seconds: best.stop_duration };
+  });
+
+  await part('overtakes', async () => {
+    const rows = await get(`/overtakes?session_key=${raceSession.session_key}`);
+    const counts = {};
+    for (const r of rows) {
+      const c = code(r.overtaking_driver_number);
+      if (c) counts[c] = (counts[c] || 0) + 1;
+    }
+    return Object.keys(counts).length ? counts : null;
+  });
+
+  return stats;
+}
+
 module.exports = {
   getMeetings, getSeasonSessions, getLatestSessionKey, getDrivers,
-  getTeamStandings, getDriverStandings, getSessionResult, buildResult, invalidate, status,
+  getTeamStandings, getDriverStandings, getSessionResult, buildResult, buildFantasyStats,
+  invalidate, status,
 };

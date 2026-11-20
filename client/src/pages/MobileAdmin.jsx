@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useAppData } from '../context/AppDataContext';
 import OpenF1Status from '../components/OpenF1Status';
 import PickEditor from '../components/admin/PickEditor';
+import FantasySwitch from '../components/admin/FantasySwitch';
 import useRaceAdmin, {
   toLocalInput, fmtLocal, LOCK_LABELS, SOURCE_NOTES, lockOptions, lockStatus, raceStarted,
 } from '../components/admin/useRaceAdmin';
@@ -20,7 +21,7 @@ const checkRow = { display: 'flex', alignItems: 'center', gap: 10, minHeight: 44
 
 function RacesTab({ setToast }) {
   const { races, countryFlag } = useAppData();
-  const { configs, loaded, loadError, saving, setLockPoint, setLockTime, toggleLocked, setJoker } = useRaceAdmin(setToast);
+  const { configs, loaded, loadError, saving, canEditSchedule, setLockPoint, setLockTime, toggleLocked, setJoker } = useRaceAdmin(setToast);
 
   // Open the next race that hasn't started by default.
   const next = races.find(r => !raceStarted(r) && !r.isCancelled);
@@ -34,6 +35,7 @@ function RacesTab({ setToast }) {
       {races.map(r => {
         const cfg = configs[r.round] || {};
         const busy = saving === r.round || !loaded;
+        const fixed = busy || !canEditSchedule; // lock settings are the site manager's
         const started = raceStarted(r);
         const isOpen = openRound === r.round;
         return (
@@ -58,7 +60,7 @@ function RacesTab({ setToast }) {
               <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 12, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
                 <div>
                   <label style={label} htmlFor={`lock-at-${r.round}`}>Tips lock at</label>
-                  <select id={`lock-at-${r.round}`} style={control} disabled={busy || started}
+                  <select id={`lock-at-${r.round}`} style={control} disabled={fixed || started}
                     value={r.lockSource === 'capped' ? 'custom' : r.lockSource}
                     onChange={e => setLockPoint(r, e.target.value)}>
                     {lockOptions(r).map(([point, time]) => (
@@ -72,14 +74,14 @@ function RacesTab({ setToast }) {
                   <label style={label} htmlFor={`lock-time-${r.round}`}>Or a custom time</label>
                   <input id={`lock-time-${r.round}`} type="datetime-local" style={control}
                     key={`${r.round}-${r.lockTime}`} defaultValue={toLocalInput(r.lockTime)}
-                    disabled={busy || started} onBlur={e => setLockTime(r, e.target.value)} />
+                    disabled={fixed || started} onBlur={e => setLockTime(r, e.target.value)} />
                   <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
                     Locks {fmtLocal(r.lockTime)} ({SOURCE_NOTES[r.lockSource] || 'weekend start'}) · always by race start
                   </div>
                 </div>
 
                 <label style={{ ...checkRow, cursor: started ? 'default' : 'pointer' }}>
-                  <input type="checkbox" checked={r.isLocked} disabled={busy || started}
+                  <input type="checkbox" checked={r.isLocked} disabled={fixed || started}
                     onChange={() => toggleLocked(r)} style={{ width: 22, height: 22, accentColor: 'var(--red)' }} />
                   <span>
                     Locked
@@ -212,6 +214,7 @@ export default function MobileAdmin({ setToast }) {
     <div className="content">
       <h2 className="page-title" style={{ marginBottom: 12 }}>Admin</h2>
       <OpenF1Status />
+      <FantasySwitch setToast={setToast} />
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {tabBtn('races', 'Races & locks')}
         {tabBtn('tips', 'Fix tips')}

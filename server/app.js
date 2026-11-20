@@ -13,11 +13,13 @@ app.use('/api', async (req, res, next) => {
 });
 
 app.use('/api/auth',        require('./routes/auth'));
+app.use('/api/leagues',     require('./routes/leagues'));
 app.use('/api/races',       require('./routes/races'));
 app.use('/api/drivers',     require('./routes/drivers'));
 app.use('/api/predictions', require('./routes/predictions'));
 app.use('/api/results',     require('./routes/results'));
 app.use('/api/scores',      require('./routes/scores'));
+app.use('/api/fantasy',     require('./routes/fantasy'));
 app.use('/api/admin',       require('./routes/admin'));
 app.use('/api/cron',        require('./routes/cron'));
 app.use('/api/polls',       require('./routes/polls'));

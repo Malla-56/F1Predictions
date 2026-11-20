@@ -13,20 +13,22 @@ const MOBILE_NAV = [
 export default function MobileNav({ setToast }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { user, logout } = useAuth();
+  const { logout, activeLeague, isLeagueAdmin, isSiteManager } = useAuth();
 
   return (
     <>
       <header className="mobile-topbar">
-        <div className="brand">
+        {/* The league name doubles as the way into the Leagues page (switch, join, invite). */}
+        <button className={`brand mobile-league${pathname === '/leagues' ? ' active' : ''}`}
+          onClick={() => navigate('/leagues')} aria-label={`League: ${activeLeague?.name}. Change league`}>
           <div className="brand-mark" />
           <div className="brand-text">
             <div className="row1">PULSE</div>
-            <div className="row2">Pitlane Picks</div>
+            <div className="row2">{activeLeague?.name} ▾</div>
           </div>
-        </div>
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {user?.role === 'admin' && (
+          {(isLeagueAdmin || isSiteManager) && (
             <button className={`mobile-logout${pathname.startsWith('/admin') ? ' active' : ''}`}
               onClick={() => navigate('/admin')} aria-label="Admin" title="Admin">
               <Icon name="admin" size={18} />

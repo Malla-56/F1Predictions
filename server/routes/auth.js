@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../db');
 const requireAuth = require('../middleware/auth');
+const { leaguesForUser, canCreateLeague, findInvite, addMember, LeagueError } = require('../leagues');
 const {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -24,33 +25,63 @@ async function recordLogin(user) {
   await pool.query('UPDATE users SET last_login_at = NOW(), last_seen_at = NOW() WHERE id = $1', [user.id]);
 }
 
-function userShape(user) {
-  return { id: user.id, username: user.username, display_name: user.display_name, role: user.role };
+// role is the site role ('site_manager' or 'user'); league roles are on each league.
+async function userShape(user) {
+  return {
+    id: user.id, username: user.username, display_name: user.display_name, role: user.role,
+    leagues: await leaguesForUser(user.id),
+    canCreateLeague: await canCreateLeague(user),
+  };
 }
 
+// Public: which league an invite code is for, so sign-up can confirm it before the
+// account is made.
+router.get('/invite/:code', async (req, res) => {
+  const invite = await findInvite(req.params.code);
+  if (!invite) return res.status(404).json({ error: 'That invite code is invalid or has expired' });
+  res.json({ league: invite.league_name, expiresAt: invite.expires_at });
+});
+
+// Sign-up always comes with a league invite code: the account and its first league
+// membership are created together, or not at all.
 router.post('/register', async (req, res) => {
+  const { username, password, display_name, invite_code } = req.body;
+  if (!username || !password || !display_name) {
+    return res.status(400).json({ error: 'username, password and display_name required' });
+  }
+  if (!invite_code) return res.status(400).json({ error: 'An invite code from a league admin is required' });
+
+  const client = await pool.connect();
+  let user;
   try {
-    const { username, password, display_name } = req.body;
-    if (!username || !password || !display_name) {
-      return res.status(400).json({ error: 'username, password and display_name required' });
-    }
-    const { rows: [existing] } = await pool.query(
+    await client.query('BEGIN');
+    const invite = await findInvite(invite_code, client);
+    if (!invite) throw new LeagueError('That invite code is invalid or has expired');
+
+    const { rows: [existing] } = await client.query(
       'SELECT id FROM users WHERE username = $1',
       [username.toLowerCase()]
     );
-    if (existing) return res.status(409).json({ error: 'Username already taken' });
+    if (existing) throw new LeagueError('Username already taken', 409);
 
     const hash = await bcrypt.hash(password, 10);
-    const { rows: [user] } = await pool.query(
+    ({ rows: [user] } = await client.query(
       'INSERT INTO users (username, password_hash, display_name) VALUES ($1, $2, $3) RETURNING *',
       [username.toLowerCase(), hash, display_name]
-    );
-    await recordLogin(user);
-    res.json({ token: makeToken(user), user: userShape(user) });
+    ));
+    await addMember(client, invite.league_id, user.id);
+    await client.query('COMMIT');
   } catch (err) {
+    await client.query('ROLLBACK');
+    if (err instanceof LeagueError) return res.status(err.status).json({ error: err.message });
     console.error('register error', err);
-    res.status(500).json({ error: 'Registration failed, please try again' });
+    return res.status(500).json({ error: 'Registration failed, please try again' });
+  } finally {
+    client.release();
   }
+
+  await recordLogin(user);
+  res.json({ token: makeToken(user), user: await userShape(user) });
 });
 
 router.post('/login', async (req, res) => {
@@ -68,7 +99,7 @@ router.post('/login', async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
     await recordLogin(user);
-    res.json({ token: makeToken(user), user: userShape(user) });
+    res.json({ token: makeToken(user), user: await userShape(user) });
   } catch (err) {
     console.error('login error', err);
     res.status(500).json({ error: 'Login failed, please try again' });
@@ -207,7 +238,7 @@ router.post('/passkey/login', async (req, res) => {
       [authenticationInfo.newCounter, passkey.id]
     );
     await recordLogin(user);
-    res.json({ token: makeToken(user), user: userShape(user) });
+    res.json({ token: makeToken(user), user: await userShape(user) });
   } catch (err) {
     passkeyError(res, err, 'Face ID sign-in failed');
   }
@@ -220,7 +251,7 @@ router.get('/me', requireAuth, async (req, res) => {
       [req.user.id]
     );
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
+    res.json({ ...(await userShape(user)), created_at: user.created_at });
   } catch (err) {
     console.error('me error', err);
     res.status(500).json({ error: 'Failed to load profile' });

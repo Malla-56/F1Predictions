@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
 import { useAppData } from '../../context/AppDataContext';
+import { useAuth } from '../../context/AuthContext';
 
 // Shared by the desktop Races page and the mobile admin page: race settings (lock
 // point, custom lock time, locked state, joker) and the rules for displaying them.
@@ -55,6 +56,8 @@ export function lockStatus(r, cfg) {
 
 export default function useRaceAdmin(setToast) {
   const { reloadRaces } = useAppData();
+  // Lock times, sprint and cancelled are shared by every league; the joker is per league.
+  const { isSiteManager: canEditSchedule } = useAuth();
   const [configs, setConfigs] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
@@ -129,5 +132,5 @@ export default function useRaceAdmin(setToast) {
     save(race, { [key]: next }, `R${race.round} ${next ? on : off}`);
   }
 
-  return { configs, loaded, loadError, saving, setLockPoint, setLockTime, toggleLocked, setJoker, toggleFlag };
+  return { configs, loaded, loadError, saving, canEditSchedule, setLockPoint, setLockTime, toggleLocked, setJoker, toggleFlag };
 }

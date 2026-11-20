@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAppData } from '../context/AppDataContext';
 import Topbar from '../components/Topbar';
@@ -7,6 +7,9 @@ import DriverChip from '../components/DriverChip';
 import DriverPicker from '../components/DriverPicker';
 import Icon from '../components/Icon';
 import Modal from '../components/Modal';
+import SegToggle from '../components/SegToggle';
+import FantasyPick from '../components/FantasyPick';
+import { useAuth } from '../context/AuthContext';
 
 function SlotRow({ label, tone, driverId, hint, locked, onOpen, onClear }) {
   return (
@@ -33,6 +36,10 @@ export default function TipEntry({ setToast }) {
   const { races, countryFlag, loading: racesLoading } = useAppData();
   const race = races.find(r => r.round === parseInt(round));
   const notFound = !racesLoading && races.length > 0 && !race;
+  // Leagues with fantasy on get a second view on this page for the driver + team pick.
+  const { activeLeague } = useAuth();
+  const [search, setSearch] = useSearchParams();
+  const showFantasy = !!activeLeague?.fantasy && search.get('view') === 'fantasy';
 
   const [top10, setTop10] = useState(Array(10).fill(null));
   const [pole, setPole] = useState(null);
@@ -131,7 +138,7 @@ export default function TipEntry({ setToast }) {
     }
   }
 
-  const crumbs = ['Pulse League', 'Tip Entry', race ? `R${String(race.round).padStart(2,'0')} · ${race.name}` : '…'];
+  const crumbs = ['Tip Entry', race ? `R${String(race.round).padStart(2,'0')} · ${race.name}` : '…'];
   const isCancelled = race?.isCancelled;
 
   if (notFound) {
@@ -209,7 +216,7 @@ export default function TipEntry({ setToast }) {
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>
-              R{String(parseInt(round)).padStart(2,'0')} · Tip Entry
+              R{String(parseInt(round)).padStart(2,'0')} · {showFantasy ? 'Fantasy Pick' : 'Tip Entry'}
             </div>
             <h2 className="page-title">
               {race?.name || 'Loading…'}{' '}
@@ -220,12 +227,22 @@ export default function TipEntry({ setToast }) {
               {race?.isJoker && <> · <strong style={{ color: 'var(--red)' }}>Joker round: all points count double</strong></>}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {activeLeague?.fantasy && (
+              <SegToggle
+                label="Tips or fantasy"
+                value={showFantasy ? 'fantasy' : 'tips'}
+                onChange={v => setSearch(v === 'fantasy' ? { view: 'fantasy' } : {}, { replace: true })}
+                options={[{ value: 'tips', label: 'Tips' }, { value: 'fantasy', label: 'Fantasy' }]}
+              />
+            )}
             <button className="btn ghost" onClick={() => navigate('/home')}>← Back</button>
           </div>
         </div>
 
-        {isLocked && loadState !== 'loading' && (
+        {showFantasy && race && <FantasyPick race={race} setToast={setToast} />}
+
+        {!showFantasy && isLocked && loadState !== 'loading' && (
           <div className="card" style={{ padding: '14px 18px', marginBottom: 18, borderColor: 'var(--red-line)', background: 'var(--red-dim)' }}>
             <span className="mono" style={{ fontSize: 11, color: 'var(--red-2)', letterSpacing: '0.08em' }}>
               {loadState === 'error'
@@ -235,7 +252,7 @@ export default function TipEntry({ setToast }) {
           </div>
         )}
 
-        <div className="entry-simple">
+        {!showFantasy && <div className="entry-simple">
           {!isLocked && (
             <div className="entry-progress">
               <div className="entry-progress-txt">
@@ -280,7 +297,7 @@ export default function TipEntry({ setToast }) {
             </div>
           )}
           </div>
-        </div>
+        </div>}
       </div>
 
       {active && !isLocked && (

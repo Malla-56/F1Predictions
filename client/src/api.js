@@ -4,10 +4,17 @@ function getToken() {
   return localStorage.getItem('token');
 }
 
+// The league the user has selected; league-scoped endpoints read it from X-League-Id.
+let currentLeagueId = null;
+export function setLeagueId(id) {
+  currentLeagueId = id;
+}
+
 async function request(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (currentLeagueId) headers['X-League-Id'] = String(currentLeagueId);
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -34,12 +41,23 @@ export const api = {
 
   auth: {
     login:    (username, password)                => request('POST', '/auth/login',    { username, password }),
-    register: (username, password, display_name)  => request('POST', '/auth/register', { username, password, display_name }),
+    register: (username, password, display_name, invite_code) =>
+      request('POST', '/auth/register', { username, password, display_name, invite_code }),
+    invite:   (code)                              => request('GET',  `/auth/invite/${encodeURIComponent(code)}`),
     me:       ()                                  => request('GET',  '/auth/me'),
     passkeyRegisterOptions: ()                         => request('POST', '/auth/passkey/register-options'),
     passkeyRegister:        (response, challengeToken) => request('POST', '/auth/passkey/register', { response, challengeToken }),
     passkeyLoginOptions:    ()                         => request('POST', '/auth/passkey/login-options'),
     passkeyLogin:           (response, challengeToken) => request('POST', '/auth/passkey/login', { response, challengeToken }),
+  },
+
+  leagues: {
+    list:      ()         => request('GET',  '/leagues'),
+    create:    (name)     => request('POST', '/leagues', { name }),
+    join:      (code)     => request('POST', '/leagues/join', { code }),
+    rename:    (id, name) => request('PUT',  `/leagues/${id}`, { name }),
+    invite:    (id)       => request('GET',  `/leagues/${id}/invite`),
+    newInvite: (id)       => request('POST', `/leagues/${id}/invite`),
   },
 
   races:   { list: () => request('GET', '/races') },
@@ -62,8 +80,15 @@ export const api = {
     rules: () => request('GET', '/scores/rules'),
   },
 
+  // Only available in leagues that have fantasy switched on.
+  fantasy: {
+    mine:    (round)       => request('GET',  `/fantasy/${round}/mine`),
+    save:    (round, data) => request('POST', `/fantasy/${round}`, data),
+    weekend: (round)       => request('GET',  `/fantasy/${round}`),
+  },
+
   polls: {
-    active: ()          => request('GET',    '/polls/active'),
+    active: ()         => request('GET',    '/polls/active'),
     vote:   (id, optId) => request('POST',   `/polls/${id}/vote`, { option_id: optId }),
     list:   ()          => request('GET',    '/polls'),
     create: (data)      => request('POST',   '/polls', data),
@@ -86,6 +111,7 @@ export const api = {
     savePred:    (uid, round, data) => request('PUT', `/admin/users/${uid}/predictions/${round}`, data),
     scoring:     ()               => request('GET',  '/admin/scoring'),
     saveScoring: (rules)          => request('PUT',  '/admin/scoring', rules),
+    saveFantasy: (enabled)        => request('PUT',  '/admin/fantasy', { enabled }),
     races:       ()               => request('GET',  '/admin/races'),
     openf1Status: ()              => request('GET',  '/admin/openf1-status'),
     saveRace:    (round, data)    => request('PUT',  `/admin/races/${round}`, data),

@@ -1,4 +1,9 @@
-export default function Topbar({ crumbs = [], right }) {
+import { useAuth } from '../context/AuthContext';
+
+// The selected league's name always leads the breadcrumbs.
+export default function Topbar({ crumbs: pageCrumbs = [], right }) {
+  const { activeLeague } = useAuth();
+  const crumbs = activeLeague ? [activeLeague.name, ...pageCrumbs] : pageCrumbs;
   return (
     <div className="topbar">
       <div className="crumbs">

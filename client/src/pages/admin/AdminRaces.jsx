@@ -7,7 +7,7 @@ import useRaceAdmin, {
 
 export default function AdminRaces({ setToast }) {
   const { races, countryFlag } = useAppData();
-  const { configs, loaded, loadError, saving, setLockPoint, setLockTime, toggleLocked, setJoker, toggleFlag } =
+  const { configs, loaded, loadError, saving, canEditSchedule, setLockPoint, setLockTime, toggleLocked, setJoker, toggleFlag } =
     useRaceAdmin(setToast);
 
   return (
@@ -18,7 +18,9 @@ export default function AdminRaces({ setToast }) {
           <div>
             <h2 className="page-title">Race Management</h2>
             <div className="page-sub">
-              Choose when tips lock and manage sprint weekends · tips always lock by race start · times are in your local time zone
+              {canEditSchedule
+                ? "Choose when tips lock (for every league) and this league's joker round · tips always lock by race start · times are in your local time zone"
+                : "Choose this league's joker round · lock times are set by the site manager for every league"}
             </div>
           </div>
         </div>
@@ -46,6 +48,7 @@ export default function AdminRaces({ setToast }) {
                 const cfg = configs[r.round] || {};
                 const started = raceStarted(r);
                 const busy = saving === r.round || !loaded;
+                const fixed = busy || !canEditSchedule;
                 return (
                   <tr key={r.round} style={r.isCancelled ? { opacity: 0.5 } : {}}>
                     <td className="mono" style={{ color: 'var(--text-3)', fontSize: 12 }}>R{String(r.round).padStart(2, '0')}</td>
@@ -60,7 +63,7 @@ export default function AdminRaces({ setToast }) {
                       <select
                         aria-label={`Lock point for round ${r.round}`}
                         value={r.lockSource === 'capped' ? 'custom' : r.lockSource}
-                        disabled={busy}
+                        disabled={fixed}
                         onChange={e => setLockPoint(r, e.target.value)}
                         style={{
                           background: 'var(--bg)', border: '1px solid var(--line)',
@@ -80,7 +83,7 @@ export default function AdminRaces({ setToast }) {
                           type="datetime-local"
                           aria-label={`Lock time for round ${r.round}`}
                           defaultValue={toLocalInput(r.lockTime)}
-                          disabled={busy}
+                          disabled={fixed}
                           onBlur={e => setLockTime(r, e.target.value)}
                           style={{
                             background: 'var(--bg)', border: '1px solid var(--line)',
@@ -88,7 +91,7 @@ export default function AdminRaces({ setToast }) {
                             fontSize: 11, padding: '4px 8px', width: '100%',
                           }}
                         />
-                        {r.lockSource !== 'weekend' && (
+                        {r.lockSource !== 'weekend' && canEditSchedule && (
                           <button className="btn ghost" style={{ height: 26, padding: '0 8px', fontSize: 11 }}
                             disabled={busy} onClick={() => setLockPoint(r, 'weekend')} title="Back to the default: lock at weekend start">
                             Reset
@@ -101,7 +104,7 @@ export default function AdminRaces({ setToast }) {
                     </td>
                     <td>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={cfg.is_sprint === 1} disabled={busy}
+                        <input type="checkbox" checked={cfg.is_sprint === 1} disabled={fixed}
                           onChange={() => toggleFlag(r, 'is_sprint', 'marked as sprint', 'sprint flag removed')} style={{ accentColor: 'var(--red)' }} />
                         <span className="mono" style={{ fontSize: 11 }}>
                           Sprint{r.isSprint && cfg.is_sprint !== 1 ? ' (auto)' : ''}
@@ -110,7 +113,7 @@ export default function AdminRaces({ setToast }) {
                     </td>
                     <td>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={cfg.cancelled === 1} disabled={busy}
+                        <input type="checkbox" checked={cfg.cancelled === 1} disabled={fixed}
                           onChange={() => toggleFlag(r, 'cancelled', 'marked cancelled', 'restored')} style={{ accentColor: 'var(--red)' }} />
                         <span className="mono" style={{ fontSize: 11 }}>
                           Cancelled{r.isCancelled && cfg.cancelled !== 1 ? ' (auto)' : ''}
@@ -127,7 +130,7 @@ export default function AdminRaces({ setToast }) {
                     <td>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: started ? 'default' : 'pointer' }}
                         title={started ? 'Tips always stay locked once the race has started' : undefined}>
-                        <input type="checkbox" checked={r.isLocked} disabled={busy || started}
+                        <input type="checkbox" checked={r.isLocked} disabled={fixed || started}
                           onChange={() => toggleLocked(r)} style={{ accentColor: 'var(--red)' }} />
                         <span className="mono" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{lockStatus(r, cfg)}</span>
                       </label>

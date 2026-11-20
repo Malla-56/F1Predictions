@@ -26,6 +26,7 @@ async function sendTipReminders() {
       FROM users u
       JOIN push_subscriptions ps ON ps.user_id = u.id
       WHERE u.is_active = 1
+        AND EXISTS (SELECT 1 FROM league_members m WHERE m.user_id = u.id AND m.is_active = 1)
         AND NOT EXISTS (SELECT 1 FROM predictions p
                         WHERE p.user_id = u.id AND p.race_round = $1 AND p.season = $2)
         AND NOT EXISTS (SELECT 1 FROM tip_reminders_sent r

@@ -17,6 +17,8 @@ import TipEntry from './pages/TipEntry';
 import Scoreboard from './pages/Scoreboard';
 import Stats from './pages/Stats';
 import Results from './pages/Results';
+import Leagues from './pages/Leagues';
+import NoLeague from './pages/NoLeague';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminScoring from './pages/admin/AdminScoring';
@@ -33,16 +35,26 @@ function RequireAuth({ children }) {
   return user ? children : <Navigate to="/" replace />;
 }
 
+// League admins of the selected league, and the site manager.
 function RequireAdmin({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isLeagueAdmin, isSiteManager } = useAuth();
   if (loading) return <div className="loading">Loading…</div>;
   if (!user) return <Navigate to="/" replace />;
-  if (user.role !== 'admin') return <Navigate to="/home" replace />;
+  if (!isLeagueAdmin && !isSiteManager) return <Navigate to="/home" replace />;
+  return children;
+}
+
+// Pages for settings shared by every league (results, importing tips).
+function RequireSiteManager({ children }) {
+  const { user, loading, isSiteManager } = useAuth();
+  if (loading) return <div className="loading">Loading…</div>;
+  if (!user) return <Navigate to="/" replace />;
+  if (!isSiteManager) return <Navigate to="/admin" replace />;
   return children;
 }
 
 function AppShell() {
-  const { user, loading } = useAuth();
+  const { user, loading, activeLeague } = useAuth();
   const isMobile = useIsMobile();
   const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
@@ -81,11 +93,15 @@ function AppShell() {
     );
   }
 
+  // Signed in but removed from every league (or never joined one).
+  if (!activeLeague) return <NoLeague />;
+
+  // Keyed by league so switching leagues reloads every page's data.
   // Mobile mode: home, tips, results and leaderboard, plus a cut-down admin page
   // (lock times, joker round, fixing tips) — no desktop sidebar.
   if (isMobile) {
     return (
-      <AppDataProvider>
+      <AppDataProvider key={activeLeague.id}>
         <div className="app app-mobile">
           <MobileNav setToast={setToast} />
           <main className="main mobile-main">
@@ -98,6 +114,7 @@ function AppShell() {
               <Route path="/results" element={<Results setToast={setToast} />} />
               <Route path="/scoreboard" element={<Scoreboard />} />
               <Route path="/stats" element={<Stats />} />
+              <Route path="/leagues" element={<Leagues setToast={setToast} />} />
               <Route path="/admin" element={<RequireAdmin><MobileAdmin setToast={setToast} /></RequireAdmin>} />
               <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
@@ -109,7 +126,7 @@ function AppShell() {
   }
 
   return (
-    <AppDataProvider>
+    <AppDataProvider key={activeLeague.id}>
       <div className="app">
         <Sidebar />
         <main className="main">
@@ -123,13 +140,14 @@ function AppShell() {
             <Route path="/results" element={<Results setToast={setToast} />} />
             <Route path="/scoreboard" element={<Scoreboard />} />
             <Route path="/stats" element={<Stats />} />
+            <Route path="/leagues" element={<Leagues setToast={setToast} />} />
 
             <Route path="/admin" element={<RequireAdmin><AdminOverview /></RequireAdmin>} />
             <Route path="/admin/users" element={<RequireAdmin><AdminUsers setToast={setToast} /></RequireAdmin>} />
             <Route path="/admin/scoring" element={<RequireAdmin><AdminScoring setToast={setToast} /></RequireAdmin>} />
             <Route path="/admin/races" element={<RequireAdmin><AdminRaces setToast={setToast} /></RequireAdmin>} />
-            <Route path="/admin/results" element={<RequireAdmin><AdminResults setToast={setToast} /></RequireAdmin>} />
-            <Route path="/admin/import" element={<RequireAdmin><AdminImport setToast={setToast} /></RequireAdmin>} />
+            <Route path="/admin/results" element={<RequireSiteManager><AdminResults setToast={setToast} /></RequireSiteManager>} />
+            <Route path="/admin/import" element={<RequireSiteManager><AdminImport setToast={setToast} /></RequireSiteManager>} />
             <Route path="/admin/data"   element={<RequireAdmin><AdminData   setToast={setToast} /></RequireAdmin>} />
             <Route path="/admin/polls"  element={<RequireAdmin><AdminPolls  setToast={setToast} /></RequireAdmin>} />
 

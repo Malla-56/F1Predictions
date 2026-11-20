@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db');
 const openf1 = require('../openf1');
 const requireAuth = require('../middleware/auth');
+const { requireLeague } = require('../middleware/league');
 const parseRound = require('../middleware/round');
 const { isRaceLocked } = require('../calendar');
 const { SEASON } = require('../config');
@@ -14,16 +15,18 @@ function positionsOf(p) {
   return [p.pos_1, p.pos_2, p.pos_3, p.pos_4, p.pos_5, p.pos_6, p.pos_7, p.pos_8, p.pos_9, p.pos_10];
 }
 
-// Get all predictions for a round (hides picks before lock unless it's your own)
-router.get('/:round', requireAuth, async (req, res) => {
+// Get the selected league's predictions for a round (hides picks before lock unless
+// it's your own)
+router.get('/:round', requireAuth, requireLeague, async (req, res) => {
   const locked = await isRaceLocked(req.round, SEASON);
 
   const { rows } = await pool.query(`
     SELECT p.*, u.display_name
     FROM predictions p
     JOIN users u ON p.user_id = u.id
+    JOIN league_members m ON m.user_id = p.user_id AND m.league_id = $3 AND m.is_active = 1
     WHERE p.race_round = $1 AND p.season = $2 AND u.is_active = 1
-  `, [req.round, SEASON]);
+  `, [req.round, SEASON, req.league.id]);
 
   res.json(rows.map(p => {
     const reveal = locked || p.user_id === req.user.id;

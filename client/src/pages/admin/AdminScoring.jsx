@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
+import FantasySwitch from '../../components/admin/FantasySwitch';
 
 export default function AdminScoring({ setToast }) {
   const [rules, setRules] = useState([]);
@@ -72,6 +73,8 @@ export default function AdminScoring({ setToast }) {
             </tbody>
           </table>
         </div>
+
+        <FantasySwitch setToast={setToast} />
 
         <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 16, lineHeight: 1.7, maxWidth: '90ch' }}>
           Note: changing point values does not automatically rescore past races. Use the Results page to trigger a rescore for individual rounds.

@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const requireAuth = require('../middleware/auth');
+const { requireLeague } = require('../middleware/league');
 const { getCalendar } = require('../calendar');
 const { SEASON } = require('../config');
 
@@ -10,13 +11,19 @@ const router = express.Router();
 // after that a race with no stored result is "awaiting" so it can't block the next one.
 const RACE_DAY_WINDOW_MS = 36 * 60 * 60 * 1000;
 
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, requireLeague, async (req, res) => {
   try {
-    const [calendar, { rows: resultRows }] = await Promise.all([
+    const [calendar, { rows: resultRows }, { rows: jokerRows }] = await Promise.all([
       getCalendar(SEASON),
       pool.query('SELECT race_round FROM race_results WHERE season = $1', [SEASON]),
+      // The joker round is chosen by each league.
+      pool.query(
+        'SELECT race_round FROM league_race_settings WHERE league_id = $1 AND season = $2 AND is_joker = 1',
+        [req.league.id, SEASON]
+      ),
     ]);
     const roundsWithResults = new Set(resultRows.map(r => r.race_round));
+    const jokerRounds = new Set(jokerRows.map(r => r.race_round));
     const now = new Date();
 
     res.json(calendar.map(r => {
@@ -45,7 +52,7 @@ router.get('/', requireAuth, async (req, res) => {
         isLocked: r.isLocked,
         isSprint: r.isSprint,
         isCancelled: r.isCancelled,
-        isJoker: r.isJoker,
+        isJoker: jokerRounds.has(r.round),
         hasResult,
         status,
       };

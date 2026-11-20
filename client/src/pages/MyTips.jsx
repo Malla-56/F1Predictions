@@ -33,7 +33,7 @@ export default function MyTips() {
   return (
     <>
       <Topbar
-        crumbs={['Pulse League', 'My Tips']}
+        crumbs={['My Tips']}
         right={
           upcoming && (
             <button className="btn primary" onClick={() => navigate(`/predict/${upcoming.round}`)}>

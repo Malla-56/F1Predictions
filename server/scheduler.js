@@ -1,7 +1,8 @@
 const pool = require('./db');
 const openf1 = require('./openf1');
-const { getCalendar } = require('./calendar');
+const { getCalendar, getRace } = require('./calendar');
 const { scoreRound } = require('./scorer');
+const { refreshStats: refreshFantasyStats } = require('./fantasy');
 const { notifyRoundScored } = require('./resultsNotify');
 const { SEASON } = require('./config');
 
@@ -24,6 +25,9 @@ async function saveAndScore(round, result, source = 'openf1') {
       updated_at  = EXCLUDED.updated_at
     RETURNING NOT EXISTS (SELECT 1 FROM prev) AS is_new
   `, [round, SEASON, JSON.stringify(result), source]);
+  // Fantasy scores on grid, fastest lap and pit stop data that the result doesn't hold.
+  const race = await getRace(round, SEASON).catch(() => null);
+  if (race) await refreshFantasyStats(race);
   await scoreRound(round, SEASON, result);
 
   if (isNew) {

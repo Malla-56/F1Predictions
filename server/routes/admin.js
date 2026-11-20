@@ -3,38 +3,70 @@ const bcrypt = require('bcrypt');
 const pool = require('../db');
 const openf1 = require('../openf1');
 const requireAuth = require('../middleware/auth');
-const requireAdmin = require('../middleware/requireAdmin');
+const requireSiteManager = require('../middleware/requireAdmin');
+const { requireLeagueAdmin } = require('../middleware/league');
+const { MEMBER_LIMIT, isSiteManager, canManageAccount } = require('../leagues');
 const parseRound = require('../middleware/round');
 const { getRace, LOCK_POINTS } = require('../calendar');
 const { scoreRound, rescoreAll } = require('../scorer');
+const { refreshStats: refreshFantasyStats } = require('../fantasy');
 const { SEASON } = require('../config');
 const { validatePrediction, UPSERT_PREDICTION, predictionParams } = require('../predictionRules');
 
+// Two levels of admin:
+//  - league admins (requireLeagueAdmin) manage the league selected in X-League-Id:
+//    its members, scoring rules, joker round, score overrides and data;
+//  - the site manager (requireSiteManager) runs what every league shares: race lock
+//    times, results, imports of tips.
 const router = express.Router();
-router.use(requireAuth, requireAdmin);
+router.use(requireAuth);
 router.param('round', parseRound);
 
 // ── Users ──────────────────────────────────────────────────────────────────
 
-router.get('/users', async (req, res) => {
+// A league's membership row for a user, or null.
+async function memberOf(leagueId, userId) {
+  const { rows: [m] } = await pool.query(
+    'SELECT role, is_active FROM league_members WHERE league_id = $1 AND user_id = $2', [leagueId, userId]
+  );
+  return m || null;
+}
+
+const NOT_YOURS = "They're also in a league you don't run, so only the site manager can change their account or tips";
+
+// role and is_active are the league membership's; can_manage says whether this admin
+// may change the account itself (see canManageAccount).
+router.get('/users', requireLeagueAdmin, async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT u.id, u.username, u.display_name, u.role, u.is_active, u.created_at,
+    SELECT u.id, u.username, u.display_name, m.role, m.is_active, m.joined_at AS created_at,
            u.last_login_at, u.last_seen_at,
-           COUNT(p.id)::int as prediction_count
-    FROM users u
-    LEFT JOIN predictions p ON p.user_id = u.id
-    GROUP BY u.id
-    ORDER BY u.created_at DESC
-  `);
+           (SELECT COUNT(*)::int FROM predictions p WHERE p.user_id = u.id) AS prediction_count,
+           ($2 OR NOT EXISTS (
+             SELECT 1 FROM league_members t
+             WHERE t.user_id = u.id AND t.is_active = 1
+               AND NOT EXISTS (SELECT 1 FROM league_members a
+                               WHERE a.league_id = t.league_id AND a.user_id = $3
+                                 AND a.role = 'admin' AND a.is_active = 1)
+           )) AS can_manage
+    FROM league_members m JOIN users u ON u.id = m.user_id
+    WHERE m.league_id = $1
+    ORDER BY m.joined_at DESC
+  `, [req.league.id, isSiteManager(req.user), req.user.id]);
   res.json(rows);
 });
 
-router.put('/users/:id', async (req, res) => {
+// role / is_active change the league membership (make admin, remove from league).
+// display_name / password change the account, so need canManageAccount.
+router.put('/users/:id', requireLeagueAdmin, async (req, res) => {
   const { role, is_active, display_name, password } = req.body;
+  const targetId = parseInt(req.params.id);
 
-  const isSelf = parseInt(req.params.id) === req.user.id;
+  const isSelf = targetId === req.user.id;
   if (isSelf && ((role !== undefined && role !== 'admin') || (is_active !== undefined && !is_active))) {
-    return res.status(400).json({ error: "You can't deactivate or demote your own account" });
+    return res.status(400).json({ error: "You can't remove or demote yourself" });
+  }
+  if (role !== undefined && !['admin', 'member', 'user'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role' });
   }
 
   if (password !== undefined) {
@@ -46,26 +78,60 @@ router.put('/users/:id', async (req, res) => {
     }
   }
 
-  const { rows: [user] } = await pool.query('SELECT id FROM users WHERE id = $1', [req.params.id]);
-  if (!user) return res.status(404).json({ error: 'User not found' });
+  const member = await memberOf(req.league.id, targetId);
+  if (!member) return res.status(404).json({ error: 'User is not in this league' });
+  if ((password !== undefined || display_name !== undefined) && !(await canManageAccount(req.user, targetId))) {
+    return res.status(403).json({ error: NOT_YOURS });
+  }
+  // Restoring someone counts toward the member limit like a new join.
+  if (is_active && !member.is_active) {
+    const { rows: [{ c }] } = await pool.query(
+      'SELECT COUNT(*)::int AS c FROM league_members WHERE league_id = $1 AND is_active = 1', [req.league.id]
+    );
+    if (c >= MEMBER_LIMIT) return res.status(409).json({ error: `This league is full (${MEMBER_LIMIT} members)` });
+  }
 
   const newHash = password ? await bcrypt.hash(password, 10) : null;
+  const newRole = role === undefined ? null : role === 'admin' ? 'admin' : 'member';
 
   await pool.query(`
-    UPDATE users SET
-      role          = COALESCE($1, role),
-      is_active     = COALESCE($2, is_active),
-      display_name  = COALESCE($3, display_name),
-      password_hash = COALESCE($4, password_hash)
-    WHERE id = $5
-  `, [role ?? null, is_active ?? null, display_name ?? null, newHash, req.params.id]);
+    UPDATE league_members SET
+      role      = COALESCE($1, role),
+      is_active = COALESCE($2, is_active)
+    WHERE league_id = $3 AND user_id = $4
+  `, [newRole, is_active === undefined ? null : (is_active ? 1 : 0), req.league.id, targetId]);
+
+  if (display_name !== undefined || newHash) {
+    await pool.query(`
+      UPDATE users SET
+        display_name  = COALESCE($1, display_name),
+        password_hash = COALESCE($2, password_hash)
+      WHERE id = $3
+    `, [display_name ?? null, newHash, targetId]);
+  }
 
   res.json({ ok: true });
 });
 
-router.delete('/users/:id/predictions/:round', async (req, res) => {
-  const params = [req.params.id, req.round, SEASON];
-  // Remove the score too, otherwise the deleted tip keeps counting on the leaderboard.
+// Tips are shared by every league, so editing one needs the same rights as the account.
+async function checkTipAccess(req, res) {
+  const userId = parseInt(req.params.id);
+  if (!(await memberOf(req.league.id, userId))) {
+    res.status(404).json({ error: 'User is not in this league' });
+    return null;
+  }
+  if (!(await canManageAccount(req.user, userId))) {
+    res.status(403).json({ error: NOT_YOURS });
+    return null;
+  }
+  return userId;
+}
+
+router.delete('/users/:id/predictions/:round', requireLeagueAdmin, async (req, res) => {
+  const userId = await checkTipAccess(req, res);
+  if (!userId) return;
+  const params = [userId, req.round, SEASON];
+  // Remove the scores too (in every league), otherwise the deleted tip keeps counting.
   await pool.query('DELETE FROM race_scores WHERE user_id = $1 AND race_round = $2 AND season = $3', params);
   await pool.query('DELETE FROM predictions WHERE user_id = $1 AND race_round = $2 AND season = $3', params);
   res.json({ ok: true });
@@ -76,14 +142,13 @@ router.delete('/users/:id/predictions/:round', async (req, res) => {
 // so the tip is scored normally, and the round is rescored if it has a result.
 // Driver codes are format-checked only: past rounds may include drivers who have
 // since left the grid.
-router.put('/users/:id/predictions/:round', async (req, res) => {
+router.put('/users/:id/predictions/:round', requireLeagueAdmin, async (req, res) => {
   const body = req.body || {};
   const error = validatePrediction(body, null);
   if (error) return res.status(400).json({ error });
 
-  const userId = parseInt(req.params.id);
-  const { rows: [user] } = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
-  if (!user) return res.status(404).json({ error: 'User not found' });
+  const userId = await checkTipAccess(req, res);
+  if (!userId) return;
 
   const client = await pool.connect();
   try {
@@ -91,8 +156,9 @@ router.put('/users/:id/predictions/:round', async (req, res) => {
     await client.query(UPSERT_PREDICTION, predictionParams(userId, req.round, SEASON, body));
     await client.query(`
       DELETE FROM race_scores
-      WHERE user_id = $1 AND race_round = $2 AND season = $3 AND breakdown LIKE '%"override":true%'
-    `, [userId, req.round, SEASON]);
+      WHERE user_id = $1 AND race_round = $2 AND season = $3 AND league_id = $4
+        AND breakdown LIKE '%"override":true%'
+    `, [userId, req.round, SEASON, req.league.id]);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
@@ -106,22 +172,29 @@ router.put('/users/:id/predictions/:round', async (req, res) => {
   );
   if (!stored) return res.json({ ok: true, scored: false });
 
+  // The tip is shared, so it's rescored in every league.
   await scoreRound(req.round, SEASON, JSON.parse(stored.result_json));
   const { rows: [score] } = await pool.query(
-    'SELECT points_total FROM race_scores WHERE user_id = $1 AND race_round = $2 AND season = $3',
-    [userId, req.round, SEASON]
+    'SELECT points_total FROM race_scores WHERE user_id = $1 AND race_round = $2 AND season = $3 AND league_id = $4',
+    [userId, req.round, SEASON, req.league.id]
   );
   res.json({ ok: true, scored: true, points: score?.points_total ?? null });
 });
 
 // ── Scoring Rules ──────────────────────────────────────────────────────────
 
-router.get('/scoring', async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM scoring_rules');
+// The selected league's values; id is the scoring_rules id the client sends back.
+router.get('/scoring', requireLeagueAdmin, async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT s.id, s.rule_key, COALESCE(l.points, s.points) AS points, s.description
+    FROM scoring_rules s
+    LEFT JOIN league_scoring_rules l ON l.rule_key = s.rule_key AND l.league_id = $1
+    ORDER BY s.id
+  `, [req.league.id]);
   res.json(rows);
 });
 
-router.put('/scoring', async (req, res) => {
+router.put('/scoring', requireLeagueAdmin, async (req, res) => {
   const rules = req.body;
   if (!Array.isArray(rules) || !rules.every(r => Number.isInteger(r.points) && r.points >= 0)) {
     return res.status(400).json({ error: 'Points must be whole numbers of 0 or more' });
@@ -130,7 +203,11 @@ router.put('/scoring', async (req, res) => {
   try {
     await client.query('BEGIN');
     for (const r of rules) {
-      await client.query('UPDATE scoring_rules SET points = $1 WHERE id = $2', [r.points, r.id]);
+      await client.query(`
+        INSERT INTO league_scoring_rules (league_id, rule_key, points)
+        SELECT $1, rule_key, $2 FROM scoring_rules WHERE id = $3
+        ON CONFLICT (league_id, rule_key) DO UPDATE SET points = EXCLUDED.points
+      `, [req.league.id, r.points, r.id]);
     }
     await client.query('COMMIT');
   } catch (err) {
@@ -139,30 +216,66 @@ router.put('/scoring', async (req, res) => {
   } finally {
     client.release();
   }
-  // Apply the new values to every round that already has a result.
-  await rescoreAll();
+  // Apply the new values to every round in this league that already has a result.
+  await rescoreAll(req.league.id);
   res.json({ ok: true });
+});
+
+// ── Fantasy ────────────────────────────────────────────────────────────────
+
+// Switches the fantasy side game on or off for the selected league. Scores already
+// earned are kept while it's off, and count again if it's switched back on.
+router.put('/fantasy', requireLeagueAdmin, async (req, res) => {
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be true or false' });
+  await pool.query('UPDATE leagues SET fantasy_enabled = $1 WHERE id = $2', [enabled ? 1 : 0, req.league.id]);
+
+  if (enabled) {
+    // Rounds scored before now have no saved race stats yet; fetch what's missing, then score.
+    const { rows } = await pool.query(`
+      SELECT r.race_round FROM race_results r
+      WHERE r.season = $1 AND EXISTS (SELECT 1 FROM fantasy_picks p WHERE p.race_round = r.race_round AND p.season = r.season)
+        AND NOT EXISTS (SELECT 1 FROM fantasy_race_stats s WHERE s.race_round = r.race_round AND s.season = r.season)
+    `, [SEASON]);
+    for (const { race_round: round } of rows) {
+      const race = await getRace(round, SEASON).catch(() => null);
+      if (race) await refreshFantasyStats(race);
+    }
+    await rescoreAll(req.league.id);
+  }
+  res.json({ ok: true, enabled });
 });
 
 // ── OpenF1 status ──────────────────────────────────────────────────────────
 
-router.get('/openf1-status', async (req, res) => {
+router.get('/openf1-status', requireLeagueAdmin, async (req, res) => {
   res.json(await openf1.status(SEASON));
 });
 
 // ── Race Config ────────────────────────────────────────────────────────────
 
-router.get('/races', async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM race_config WHERE season = $1 ORDER BY race_round', [SEASON]);
+// Shared race settings plus this league's joker round.
+router.get('/races', requireLeagueAdmin, async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT COALESCE(c.race_round, j.race_round) AS race_round,
+           c.lock_time, c.manually_locked, c.is_sprint, c.cancelled, c.notes, c.lock_at,
+           COALESCE(j.is_joker, 0) AS is_joker
+    FROM (SELECT * FROM race_config WHERE season = $1) c
+    FULL JOIN (SELECT * FROM league_race_settings WHERE season = $1 AND league_id = $2) j
+      ON j.race_round = c.race_round
+    ORDER BY 1
+  `, [SEASON, req.league.id]);
   res.json(rows);
 });
 
-const RACE_FLAGS = ['manually_locked', 'is_sprint', 'cancelled', 'is_joker'];
+const RACE_FLAGS = ['manually_locked', 'is_sprint', 'cancelled'];
 
-// Partial update: only the fields present in the body change. lock_time: null clears
-// the override (back to the default lock at the start of the race weekend). An override
-// later than the race start is capped to it in calendar.getCalendar.
-router.put('/races/:round', async (req, res) => {
+// Partial update: only the fields present in the body change. is_joker is the selected
+// league's; everything else is shared by all leagues and needs the site manager.
+// lock_time: null clears the override (back to the default lock at the start of the
+// race weekend). An override later than the race start is capped to it in
+// calendar.getCalendar.
+router.put('/races/:round', requireLeagueAdmin, async (req, res) => {
   const body = req.body || {};
   const fields = {};
   for (const key of RACE_FLAGS) {
@@ -185,24 +298,38 @@ router.put('/races/:round', async (req, res) => {
   if ('notes' in body) fields.notes = body.notes ?? null;
 
   const keys = Object.keys(fields);
-  if (!keys.length) return res.status(400).json({ error: 'Nothing to update' });
+  const joker = 'is_joker' in body ? (body.is_joker ? 1 : 0) : null;
+  if (!keys.length && joker === null) return res.status(400).json({ error: 'Nothing to update' });
+  if (keys.length && !isSiteManager(req.user)) {
+    return res.status(403).json({ error: 'Lock times and race status are shared by every league, so only the site manager can change them' });
+  }
 
-  const placeholders = keys.map((_, i) => `$${i + 3}`).join(', ');
-  const updates = keys.map(k => `${k} = EXCLUDED.${k}`).join(', ');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // Only one joker round per season: choosing a new one clears the old one.
-    if (fields.is_joker === 1) {
-      await client.query(
-        'UPDATE race_config SET is_joker = 0 WHERE season = $1 AND race_round <> $2', [SEASON, req.round]
-      );
+    if (keys.length) {
+      const placeholders = keys.map((_, i) => `$${i + 3}`).join(', ');
+      const updates = keys.map(k => `${k} = EXCLUDED.${k}`).join(', ');
+      await client.query(`
+        INSERT INTO race_config (race_round, season, ${keys.join(', ')})
+        VALUES ($1, $2, ${placeholders})
+        ON CONFLICT (race_round, season) DO UPDATE SET ${updates}
+      `, [req.round, SEASON, ...keys.map(k => fields[k])]);
     }
-    await client.query(`
-      INSERT INTO race_config (race_round, season, ${keys.join(', ')})
-      VALUES ($1, $2, ${placeholders})
-      ON CONFLICT (race_round, season) DO UPDATE SET ${updates}
-    `, [req.round, SEASON, ...keys.map(k => fields[k])]);
+    if (joker !== null) {
+      // Only one joker round per season: choosing a new one clears the old one.
+      if (joker === 1) {
+        await client.query(
+          'UPDATE league_race_settings SET is_joker = 0 WHERE league_id = $1 AND season = $2 AND race_round <> $3',
+          [req.league.id, SEASON, req.round]
+        );
+      }
+      await client.query(`
+        INSERT INTO league_race_settings (league_id, season, race_round, is_joker)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (league_id, season, race_round) DO UPDATE SET is_joker = EXCLUDED.is_joker
+      `, [req.league.id, SEASON, req.round, joker]);
+    }
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
@@ -212,14 +339,14 @@ router.put('/races/:round', async (req, res) => {
   }
 
   // Doubling (or un-doubling) applies to any round that already has a result.
-  if ('is_joker' in fields) await rescoreAll();
+  if (joker !== null) await rescoreAll(req.league.id);
 
   res.json({ ok: true });
 });
 
 // ── Results ────────────────────────────────────────────────────────────────
 
-router.get('/results', async (req, res) => {
+router.get('/results', requireLeagueAdmin, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM race_results WHERE season = $1 ORDER BY race_round', [SEASON]);
   res.json(rows.map(r => {
     const result = JSON.parse(r.result_json);
@@ -229,7 +356,7 @@ router.get('/results', async (req, res) => {
   }));
 });
 
-router.put('/results/:round', async (req, res) => {
+router.put('/results/:round', requireSiteManager, async (req, res) => {
   const round = req.round;
   const { finishOrder, pole, dnfs, sprintWinner, sprintFinishOrder, sprintDnfs } = req.body;
   if (!Array.isArray(finishOrder) || !finishOrder.some(Boolean)) {
@@ -254,7 +381,7 @@ router.put('/results/:round', async (req, res) => {
 });
 
 // Fetch all pending results from OpenF1 (manual trigger)
-router.post('/results/fetch-all', async (req, res) => {
+router.post('/results/fetch-all', requireSiteManager, async (req, res) => {
   const { fetchPendingResults } = require('../scheduler');
   try {
     const { fetched, errors } = await fetchPendingResults();
@@ -265,7 +392,7 @@ router.post('/results/fetch-all', async (req, res) => {
 });
 
 // Fetch a single round's result from OpenF1, save, and score
-router.post('/results/:round/fetch', async (req, res) => {
+router.post('/results/:round/fetch', requireSiteManager, async (req, res) => {
   const round = req.round;
   const { saveAndScore } = require('../scheduler');
   try {
@@ -280,20 +407,23 @@ router.post('/results/:round/fetch', async (req, res) => {
   }
 });
 
-router.post('/results/:round/rescore', async (req, res) => {
+router.post('/results/:round/rescore', requireSiteManager, async (req, res) => {
   const round = req.round;
   const { rows: [row] } = await pool.query(
     'SELECT * FROM race_results WHERE race_round = $1 AND season = $2',
     [round, SEASON]
   );
   if (!row) return res.status(404).json({ error: 'No result stored for this round' });
+  const race = await getRace(round, SEASON).catch(() => null);
+  if (race) await refreshFantasyStats(race);
   await scoreRound(round, SEASON, JSON.parse(row.result_json));
   res.json({ ok: true });
 });
 
 // ── Import ─────────────────────────────────────────────────────────────────
 
-router.post('/import', async (req, res) => {
+// Tips are shared by every league, so importing them is the site manager's job.
+router.post('/import', requireSiteManager, async (req, res) => {
   const records = req.body;
   if (!Array.isArray(records)) return res.status(400).json({ error: 'Body must be a JSON array' });
 
@@ -366,7 +496,7 @@ router.post('/import', async (req, res) => {
 
 // ── Export (all predictions + scores for data manager) ─────────────────────
 
-router.get('/export', async (req, res) => {
+router.get('/export', requireLeagueAdmin, async (req, res) => {
   const { rows } = await pool.query(`
     SELECT
       u.id as user_id, u.username, u.display_name,
@@ -377,17 +507,18 @@ router.get('/export', async (req, res) => {
       s.points_total
     FROM predictions p
     JOIN users u ON u.id = p.user_id
+    JOIN league_members m ON m.user_id = p.user_id AND m.league_id = $2
     LEFT JOIN race_scores s
-      ON s.user_id = p.user_id AND s.race_round = p.race_round AND s.season = p.season
+      ON s.user_id = p.user_id AND s.race_round = p.race_round AND s.season = p.season AND s.league_id = $2
     WHERE p.season = $1
     ORDER BY p.race_round, u.username
-  `, [SEASON]);
+  `, [SEASON, req.league.id]);
   res.json(rows);
 });
 
 // ── Score Override ──────────────────────────────────────────────────────────
 
-router.post('/scores/override', async (req, res) => {
+router.post('/scores/override', requireLeagueAdmin, async (req, res) => {
   const records = req.body;
   if (!Array.isArray(records) || records.length === 0)
     return res.status(400).json({ error: 'Body must be a non-empty JSON array' });
@@ -407,20 +538,21 @@ router.post('/scores/override', async (req, res) => {
       let entry = summary.find(s => s.round === round && s.season === season);
       if (!entry) { entry = { round, season, written: 0, skipped: [] }; summary.push(entry); }
 
-      const { rows: [user] } = await client.query(
-        'SELECT id FROM users WHERE username = $1',
-        [(rec.username || '').toLowerCase()]
-      );
+      // Only members of this league can be given points in it.
+      const { rows: [user] } = await client.query(`
+        SELECT u.id FROM users u JOIN league_members m ON m.user_id = u.id AND m.league_id = $2
+        WHERE u.username = $1
+      `, [(rec.username || '').toLowerCase(), req.league.id]);
       if (!user) { entry.skipped.push(rec.username || '?'); continue; }
 
       await client.query(`
-        INSERT INTO race_scores (user_id, race_round, season, points_total, breakdown, scored_at)
-        VALUES ($1, $2, $3, $4, '{"override":true}', NOW())
-        ON CONFLICT (user_id, race_round, season) DO UPDATE SET
+        INSERT INTO race_scores (league_id, user_id, race_round, season, points_total, breakdown, scored_at)
+        VALUES ($5, $1, $2, $3, $4, '{"override":true}', NOW())
+        ON CONFLICT (league_id, user_id, race_round, season) DO UPDATE SET
           points_total = EXCLUDED.points_total,
           breakdown    = EXCLUDED.breakdown,
           scored_at    = EXCLUDED.scored_at
-      `, [user.id, round, season, points]);
+      `, [user.id, round, season, points, req.league.id]);
       entry.written++;
     }
 
@@ -436,11 +568,18 @@ router.post('/scores/override', async (req, res) => {
 
 // ── Stats overview ─────────────────────────────────────────────────────────
 
-router.get('/overview', async (req, res) => {
+router.get('/overview', requireLeagueAdmin, async (req, res) => {
   const [r1, r2, r3] = await Promise.all([
-    pool.query('SELECT COUNT(*)::int as c FROM users WHERE is_active = 1'),
-    pool.query('SELECT COUNT(*)::int as c FROM predictions WHERE season = $1', [SEASON]),
-    pool.query('SELECT COUNT(DISTINCT race_round)::int as c FROM race_scores WHERE season = $1', [SEASON]),
+    pool.query('SELECT COUNT(*)::int as c FROM league_members WHERE league_id = $1 AND is_active = 1', [req.league.id]),
+    pool.query(`
+      SELECT COUNT(*)::int as c FROM predictions p
+      JOIN league_members m ON m.user_id = p.user_id AND m.league_id = $2 AND m.is_active = 1
+      WHERE p.season = $1
+    `, [SEASON, req.league.id]),
+    pool.query(
+      'SELECT COUNT(DISTINCT race_round)::int as c FROM race_scores WHERE season = $1 AND league_id = $2',
+      [SEASON, req.league.id]
+    ),
   ]);
   res.json({
     userCount:    r1.rows[0].c,

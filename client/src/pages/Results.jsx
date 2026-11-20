@@ -7,9 +7,14 @@ import Topbar from '../components/Topbar';
 import ResultsTable from '../components/ResultsTable';
 import SpecialPair from '../components/SpecialPair';
 import { onActivate } from '../components/useDialog';
+import SegToggle from '../components/SegToggle';
+import FantasyWeekend from '../components/FantasyWeekend';
 
 export default function Results({ setToast }) {
-  const { user } = useAuth();
+  const { user, activeLeague } = useAuth();
+  // Leagues with fantasy on can flip the page to that round's fantasy weekend.
+  const [view, setView] = useState('race');
+  const showFantasy = !!activeLeague?.fantasy && view === 'fantasy';
   const { races, countryFlag, loading: racesLoading } = useAppData();
   const navigate = useNavigate();
   const { driverById } = useAppData();
@@ -110,7 +115,7 @@ export default function Results({ setToast }) {
   if (!race) {
     return (
       <>
-        <Topbar crumbs={['Pulse League', 'Results']} />
+        <Topbar crumbs={['Results']} />
         <div className="content">
           {!racesLoading && completed.length === 0
             ? <div className="results-empty">No results yet — check back after the first race.</div>
@@ -123,7 +128,7 @@ export default function Results({ setToast }) {
   if (error && results === undefined) {
     return (
       <>
-        <Topbar crumbs={['Pulse League', 'Results', race.name]} />
+        <Topbar crumbs={['Results', race.name]} />
         <div className="content">
           <div className="results-empty">Error loading results: {error}</div>
         </div>
@@ -134,7 +139,7 @@ export default function Results({ setToast }) {
   if (results === undefined || allPredictions === undefined) {
     return (
       <>
-        <Topbar crumbs={['Pulse League', 'Results', race.name]} />
+        <Topbar crumbs={['Results', race.name]} />
         <div className="content"><div className="loading">Loading results…</div></div>
       </>
     );
@@ -150,7 +155,7 @@ export default function Results({ setToast }) {
 
   return (
     <>
-      <Topbar crumbs={['Pulse League', 'Results', race.name]} right={topbarRight} />
+      <Topbar crumbs={['Results', race.name]} right={topbarRight} />
       <div className="content">
         <div className="results-head">
           <button className="results-back" onClick={() => navigate('/home')}>
@@ -169,6 +174,14 @@ export default function Results({ setToast }) {
           </div>
 
           <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            {activeLeague?.fantasy && (
+              <SegToggle
+                label="Race or fantasy"
+                value={showFantasy ? 'fantasy' : 'race'}
+                onChange={setView}
+                options={[{ value: 'race', label: 'Race' }, { value: 'fantasy', label: 'Fantasy' }]}
+              />
+            )}
             <div className="round-selector-wrap">
               <div className="round-selector">
                 <button className="arrow-btn" aria-label="Previous round" disabled={!canPrev} onClick={() => canPrev && setRoundId(completed[idx - 1].round)}>
@@ -230,7 +243,7 @@ export default function Results({ setToast }) {
             </div>
 
             {/* User selector */}
-            {allPredictions && allPredictions.length > 0 && (
+            {!showFantasy && allPredictions && allPredictions.length > 0 && (
               <div style={{ position: 'relative' }}>
                 <select
                   aria-label="Tipper"
@@ -265,7 +278,9 @@ export default function Results({ setToast }) {
           </div>
         </div>
 
-        {!results ? (
+        {showFantasy ? (
+          <FantasyWeekend round={roundId} />
+        ) : !results ? (
           <div className="results-empty">Results for this race haven't been published yet</div>
         ) : (
           <>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import Icon from '../components/Icon';
 import { passkeySupported, biometricLabel, hasAnyPasskey, isCancel } from '../passkey';
@@ -11,12 +12,26 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [invite, setInvite] = useState(null); // { league } once the code checks out, or { error }
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [canPasskey, setCanPasskey] = useState(false);
 
   useEffect(() => { passkeySupported().then(setCanPasskey); }, []);
+
+  // Confirm which league a complete code is for before the account is made.
+  useEffect(() => {
+    setInvite(null);
+    const code = inviteCode.replace(/[^A-Z0-9]/g, '');
+    if (mode !== 'signup' || code.length !== 6) return;
+    let stale = false;
+    api.auth.invite(code)
+      .then(r => { if (!stale) setInvite({ league: r.league }); })
+      .catch(err => { if (!stale) setInvite({ error: err.message }); });
+    return () => { stale = true; };
+  }, [inviteCode, mode]);
 
   const bio = biometricLabel();
   // Only offer biometric sign-in once a passkey has been set up on this device
@@ -36,7 +51,7 @@ export default function Login() {
       if (mode === 'signin') {
         await login(username.trim(), password);
       } else {
-        await register(username.trim(), password, displayName.trim());
+        await register(username.trim(), password, displayName.trim(), inviteCode.trim());
       }
       navigate('/home');
     } catch (err) {
@@ -84,7 +99,7 @@ export default function Login() {
 
         <h1 className="login-title">{mode === 'signin' ? 'Welcome back' : 'Join the league'}</h1>
         <p className="login-lede">
-          {mode === 'signin' ? 'Sign in to lock in your tips for the next race.' : 'Create an account to start tipping.'}
+          {mode === 'signin' ? 'Sign in to lock in your tips for the next race.' : 'You need an invite code from a league admin to sign up.'}
         </p>
 
         {passkeyFirst && (
@@ -95,6 +110,25 @@ export default function Login() {
         )}
 
         <form onSubmit={submit}>
+          {mode === 'signup' && (
+            <div className="fld">
+              <label htmlFor="invite-code">League invite code</label>
+              <input
+                id="invite-code" value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())}
+                placeholder="From your league admin" autoComplete="off" autoCapitalize="characters"
+                autoCorrect="off" spellCheck={false} maxLength={8} enterKeyHint="next" required
+                style={{ fontFamily: 'var(--mono)', letterSpacing: '0.15em' }}
+              />
+              {invite?.league && (
+                <div className="mono" style={{ fontSize: 11, color: 'var(--green)', marginTop: 6 }}>
+                  ✓ Joining {invite.league}
+                </div>
+              )}
+              {invite?.error && (
+                <div className="mono" style={{ fontSize: 11, color: 'var(--red-2)', marginTop: 6 }}>{invite.error}</div>
+              )}
+            </div>
+          )}
           {mode === 'signup' && (
             <div className="fld">
               <label htmlFor="display-name">Display name</label>

@@ -29,7 +29,7 @@ export default function Stats() {
   if (!me || completedRaces.length === 0) {
     return (
       <>
-        <Topbar crumbs={['Pulse League', 'Your Stats']} />
+        <Topbar crumbs={['Your Stats']} />
         <div className="content">
           <div className="loading">
             {!loaded ? 'Loading stats…'
@@ -60,7 +60,7 @@ export default function Stats() {
 
   return (
     <>
-      <Topbar crumbs={['Pulse League', 'Your Stats']} />
+      <Topbar crumbs={['Your Stats']} />
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>

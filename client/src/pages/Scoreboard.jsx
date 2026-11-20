@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useAppData } from '../context/AppDataContext';
+import { useAuth } from '../context/AuthContext';
 import Topbar from '../components/Topbar';
 import Avatar from '../components/Avatar';
 import useIsMobile from '../hooks/useIsMobile';
@@ -9,6 +10,8 @@ import { Fragment } from 'react';
 
 export default function Scoreboard() {
   const { races } = useAppData();
+  // With fantasy on, the total includes fantasy points and they get their own column.
+  const fantasyOn = !!useAuth().activeLeague?.fantasy;
   const [rows, setRows] = useState([]);
   const [sortKey, setSortKey] = useState('total');
   const [sortDir, setSortDir] = useState('desc');
@@ -55,7 +58,7 @@ export default function Scoreboard() {
 
   return (
     <>
-      <Topbar crumbs={['Pulse League', 'Scoreboard']} />
+      <Topbar crumbs={['Scoreboard']} />
       <div className="content">
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
@@ -68,11 +71,12 @@ export default function Scoreboard() {
 
         <div className="score-table">
           {!isMobile && (
-            <div className="score-row head">
+            <div className={`score-row head${fantasyOn ? ' with-fantasy' : ''}`}>
               <SortHd k="rank" label="Rank" />
               <span></span>
               <span>Tipper</span>
               <SortHd k="total" label="Total Pts" />
+              {fantasyOn && <SortHd k="fantasyTotal" label="Fantasy" />}
               <span className="mono">{lastRound ? `R${lastRound.round}` : '—'}</span>
               <SortHd k="played" label="Rounds" />
               <span></span>
@@ -82,12 +86,15 @@ export default function Scoreboard() {
           {isMobile && (
             <div className="score-sort-bar">
               <SortHd k="total" label="Total" />
+              {fantasyOn && <SortHd k="fantasyTotal" label="Fantasy" />}
               <SortHd k="played" label="Rounds" />
             </div>
           )}
 
           {sorted.map(r => {
             const lastPts = lastRound ? (r.perRace?.[lastRound.round]?.points ?? 0) : 0;
+            const lastFantasy = lastRound ? (r.fantasy?.[lastRound.round]?.bonus ?? 0) : 0;
+            const lastGain = lastPts + lastFantasy;
             const isOpen = expanded === r.userId;
 
             const expandPanel = isOpen && (
@@ -101,6 +108,9 @@ export default function Scoreboard() {
                       <span className="r">R{String(race.round).padStart(2, '0')}</span>
                       <span className={`p${!isDone || !entry ? ' bad' : ''}`}>
                         {isDone && entry ? entry.points : '—'}
+                        {fantasyOn && r.fantasy?.[race.round]?.bonus > 0 && (
+                          <span className="fx-fan" title="Fantasy points"> +{r.fantasy[race.round].bonus}</span>
+                        )}
                       </span>
                     </div>
                   );
@@ -126,11 +136,12 @@ export default function Scoreboard() {
                       <div className="name">{r.displayName}</div>
                       <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>
                         {r.played} / {races.length} rounds · last {lastPts} pts
+                        {fantasyOn && <span className="fx-fan"> · fantasy {r.fantasyTotal ?? 0}</span>}
                       </span>
                     </div>
                     <div className="score-card-pts">
                       <span className="num">{r.total}</span>
-                      <span className="delta">+{lastPts}</span>
+                      <span className="delta">+{lastGain}</span>
                     </div>
                     <span className="chev">▾</span>
                   </div>
@@ -142,7 +153,7 @@ export default function Scoreboard() {
             return (
               <Fragment key={r.userId}>
                 <div
-                  className={`score-row${r.isMe ? ' me' : ''}${isOpen ? ' expanded' : ''}`}
+                  className={`score-row${r.isMe ? ' me' : ''}${isOpen ? ' expanded' : ''}${fantasyOn ? ' with-fantasy' : ''}`}
                   onClick={() => setExpanded(isOpen ? null : r.userId)}
                   role="button"
                   tabIndex={0}
@@ -153,7 +164,12 @@ export default function Scoreboard() {
                   <span className={`rank${r.rank === 1 ? ' gold' : ''}`}>{String(r.rank).padStart(2, '0')}</span>
                   <Avatar displayName={r.displayName} size={36} isMe={r.isMe} />
                   <div className="name">{r.displayName}</div>
-                  <span className="num">{r.total}<span className="delta">+{lastPts}</span></span>
+                  <span className="num">{r.total}<span className="delta">+{lastGain}</span></span>
+                  {fantasyOn && (
+                    <span className="num fx-fan">
+                      {r.fantasyTotal ?? 0}{lastFantasy > 0 && <span className="delta">+{lastFantasy}</span>}
+                    </span>
+                  )}
                   <span className="num muted">{lastPts} pts</span>
                   <span className="num muted">{r.played} / {races.length}</span>
                   <span className="chev">▾</span>

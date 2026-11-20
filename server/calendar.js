@@ -121,7 +121,6 @@ async function getCalendar(season = SEASON) {
         isLocked: cfg.manually_locked === 1 || now >= lockTime,
         isSprint: own.some(s => s.session_name === 'Sprint') || cfg.is_sprint === 1,
         isCancelled: cfg.cancelled === 1 || !!m.is_cancelled,
-        isJoker: cfg.is_joker === 1,
       };
     });
 }
