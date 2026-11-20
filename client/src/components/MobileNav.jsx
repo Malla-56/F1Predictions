@@ -13,7 +13,7 @@ const MOBILE_NAV = [
 export default function MobileNav({ setToast }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
   return (
     <>
@@ -26,6 +26,12 @@ export default function MobileNav({ setToast }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {user?.role === 'admin' && (
+            <button className={`mobile-logout${pathname.startsWith('/admin') ? ' active' : ''}`}
+              onClick={() => navigate('/admin')} aria-label="Admin" title="Admin">
+              <Icon name="admin" size={18} />
+            </button>
+          )}
           <button className="mobile-logout" onClick={logout} aria-label="Sign out">
             <Icon name="logout" size={18} />
           </button>

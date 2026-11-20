@@ -8,6 +8,7 @@ const parseRound = require('../middleware/round');
 const { getRace, LOCK_POINTS } = require('../calendar');
 const { scoreRound, rescoreAll } = require('../scorer');
 const { SEASON } = require('../config');
+const { validatePrediction, UPSERT_PREDICTION, predictionParams } = require('../predictionRules');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -68,6 +69,49 @@ router.delete('/users/:id/predictions/:round', async (req, res) => {
   await pool.query('DELETE FROM race_scores WHERE user_id = $1 AND race_round = $2 AND season = $3', params);
   await pool.query('DELETE FROM predictions WHERE user_id = $1 AND race_round = $2 AND season = $3', params);
   res.json({ ok: true });
+});
+
+// Enter or correct a user's tip for any round, locked or not (e.g. a tip given in
+// person after an app error). Any manual points override for that round is removed
+// so the tip is scored normally, and the round is rescored if it has a result.
+// Driver codes are format-checked only: past rounds may include drivers who have
+// since left the grid.
+router.put('/users/:id/predictions/:round', async (req, res) => {
+  const body = req.body || {};
+  const error = validatePrediction(body, null);
+  if (error) return res.status(400).json({ error });
+
+  const userId = parseInt(req.params.id);
+  const { rows: [user] } = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(UPSERT_PREDICTION, predictionParams(userId, req.round, SEASON, body));
+    await client.query(`
+      DELETE FROM race_scores
+      WHERE user_id = $1 AND race_round = $2 AND season = $3 AND breakdown LIKE '%"override":true%'
+    `, [userId, req.round, SEASON]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  const { rows: [stored] } = await pool.query(
+    'SELECT result_json FROM race_results WHERE race_round = $1 AND season = $2', [req.round, SEASON]
+  );
+  if (!stored) return res.json({ ok: true, scored: false });
+
+  await scoreRound(req.round, SEASON, JSON.parse(stored.result_json));
+  const { rows: [score] } = await pool.query(
+    'SELECT points_total FROM race_scores WHERE user_id = $1 AND race_round = $2 AND season = $3',
+    [userId, req.round, SEASON]
+  );
+  res.json({ ok: true, scored: true, points: score?.points_total ?? null });
 });
 
 // ── Scoring Rules ──────────────────────────────────────────────────────────

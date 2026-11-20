@@ -4,6 +4,7 @@ import { api } from '../../api';
 import { useAppData } from '../../context/AppDataContext';
 import Topbar from '../../components/Topbar';
 import { onActivate } from '../../components/useDialog';
+import PickEditor from '../../components/admin/PickEditor';
 
 // ── Data helpers ───────────────────────────────────────────────────────────
 
@@ -124,14 +125,37 @@ function buildPointsPayload(rows) {
 const POS_KEYS = ['pos_1','pos_2','pos_3','pos_4','pos_5','pos_6','pos_7','pos_8','pos_9','pos_10'];
 
 function CoverageSection({ races, users, predMap, scoreMap, setToast, onDataChange }) {
+  const { drivers } = useAppData();
   const [expanded, setExpanded] = useState(null);
   const [overrides, setOverrides] = useState({});  // { username: string }
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(null);    // username whose tip is open in the editor
 
   function openRound(round) {
     setExpanded(prev => prev === round ? null : round);
     setOverrides({});
+    setEditing(null);
   }
+
+  const editButton = u => (
+    <td style={{ ...tdStyle, textAlign: 'right' }}>
+      <button className="btn ghost" style={{ height: 24, padding: '0 8px', fontSize: 11 }}
+        aria-label={`Edit ${u.display_name}'s tip`}
+        onClick={e => { e.stopPropagation(); setEditing(prev => prev === u.username ? null : u.username); }}>
+        {editing === u.username ? 'Close' : 'Edit picks'}
+      </button>
+    </td>
+  );
+
+  const editorRow = (race, u, p) => editing === u.username && (
+    <tr>
+      <td colSpan={POS_KEYS.length + 6} style={{ padding: 0, borderTop: '1px solid var(--line)' }}>
+        <PickEditor race={race} user={u} pred={p} drivers={drivers} setToast={setToast}
+          onCancel={() => setEditing(null)}
+          onSaved={() => { setEditing(null); onDataChange(); }} />
+      </td>
+    </tr>
+  );
 
   async function saveOverrides(round) {
     const payload = Object.entries(overrides)
@@ -204,6 +228,7 @@ function CoverageSection({ races, users, predMap, scoreMap, setToast, onDataChan
                         <th style={thStyle}>DNF</th>
                         <th style={thStyle}>Sprint</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Pts</th>
+                        <th style={thStyle}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -215,7 +240,8 @@ function CoverageSection({ races, users, predMap, scoreMap, setToast, onDataChan
                           // No picks — show a direct score input instead of a wall of dashes
                           const val = overrides[u.username] ?? (pts != null ? String(pts) : '');
                           return (
-                            <tr key={u.username} style={{ background: 'rgba(225,6,0,0.06)', borderTop: '1px solid var(--line)' }}>
+                            <Fragment key={u.username}>
+                            <tr style={{ background: 'rgba(225,6,0,0.06)', borderTop: '1px solid var(--line)' }}>
                               <td style={{ ...tdStyle, fontWeight: 600, color: 'var(--red-2)' }}>
                                 {u.display_name}
                                 <span className="mono" style={{ fontSize: 10, marginLeft: 6 }}>
@@ -238,12 +264,16 @@ function CoverageSection({ races, users, predMap, scoreMap, setToast, onDataChan
                                   style={{ width: 60, height: 28, textAlign: 'center', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 3, color: 'var(--text)', fontFamily: 'var(--display)', fontWeight: 700, fontSize: 13 }}
                                 />
                               </td>
+                              {editButton(u)}
                             </tr>
+                            {editorRow(race, u, null)}
+                            </Fragment>
                           );
                         }
 
                         return (
-                          <tr key={u.username} style={{ borderTop: '1px solid var(--line)' }}>
+                          <Fragment key={u.username}>
+                          <tr style={{ borderTop: '1px solid var(--line)' }}>
                             <td style={{ ...tdStyle, fontWeight: 600 }}>{u.display_name}</td>
                             <td style={{ ...tdStyle, fontFamily: 'var(--mono)' }}>{p.pole || '—'}</td>
                             {POS_KEYS.map(k => <td key={k} style={{ ...tdStyle, fontFamily: 'var(--mono)' }}>{p[k] || '—'}</td>)}
@@ -252,7 +282,10 @@ function CoverageSection({ races, users, predMap, scoreMap, setToast, onDataChan
                             <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--display)', fontWeight: 700, color: pts != null ? 'var(--green)' : 'var(--text-3)' }}>
                               {pts != null ? pts : '—'}
                             </td>
+                            {editButton(u)}
                           </tr>
+                          {editorRow(race, u, p)}
+                          </Fragment>
                         );
                       })}
                     </tbody>

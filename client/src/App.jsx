@@ -25,6 +25,7 @@ import AdminResults from './pages/admin/AdminResults';
 import AdminImport from './pages/admin/AdminImport';
 import AdminData from './pages/admin/AdminData';
 import AdminPolls from './pages/admin/AdminPolls';
+import MobileAdmin from './pages/MobileAdmin';
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth();
@@ -80,7 +81,8 @@ function AppShell() {
     );
   }
 
-  // Mobile mode: home, tips, results and leaderboard only — no admin, no desktop sidebar.
+  // Mobile mode: home, tips, results and leaderboard, plus a cut-down admin page
+  // (lock times, joker round, fixing tips) — no desktop sidebar.
   if (isMobile) {
     return (
       <AppDataProvider>
@@ -96,6 +98,7 @@ function AppShell() {
               <Route path="/results" element={<Results setToast={setToast} />} />
               <Route path="/scoreboard" element={<Scoreboard />} />
               <Route path="/stats" element={<Stats />} />
+              <Route path="/admin" element={<RequireAdmin><MobileAdmin setToast={setToast} /></RequireAdmin>} />
               <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           </main>

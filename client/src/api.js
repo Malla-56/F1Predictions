@@ -83,6 +83,7 @@ export const api = {
     users:       ()               => request('GET',  '/admin/users'),
     updateUser:  (id, data)       => request('PUT',  `/admin/users/${id}`, data),
     deletePred:  (uid, round)     => request('DELETE', `/admin/users/${uid}/predictions/${round}`),
+    savePred:    (uid, round, data) => request('PUT', `/admin/users/${uid}/predictions/${round}`, data),
     scoring:     ()               => request('GET',  '/admin/scoring'),
     saveScoring: (rules)          => request('PUT',  '/admin/scoring', rules),
     races:       ()               => request('GET',  '/admin/races'),
