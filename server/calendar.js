@@ -54,6 +54,29 @@ function sessionNamed(sessions, name) {
   return sessions.find(s => s.session_name === name && !s.is_cancelled) || null;
 }
 
+const LOCK_POINTS = ['sprint', 'qualifying', 'race'];
+
+// When tips lock, and why. Precedence: a custom lock_time, then the chosen session
+// (lock_at), then the default of the weekend start (first practice). Whatever is set,
+// tips never stay open past the race start. A chosen session that doesn't exist this
+// weekend (e.g. sprint on a normal weekend) falls back to the weekend start.
+function resolveLock(cfg, times) {
+  let lockTime = times.weekend;
+  let lockSource = 'weekend';
+  if (cfg.lock_time) {
+    lockTime = new Date(cfg.lock_time);
+    lockSource = 'custom';
+  } else if (LOCK_POINTS.includes(cfg.lock_at) && times[cfg.lock_at]) {
+    lockTime = times[cfg.lock_at];
+    lockSource = cfg.lock_at;
+  }
+  if (times.race && lockTime > times.race) {
+    lockTime = times.race;
+    lockSource = lockSource === 'custom' ? 'capped' : 'race';
+  }
+  return { lockTime, lockSource };
+}
+
 // The season's Grands Prix in date order, each with its round, key sessions and lock state.
 async function getCalendar(season = SEASON) {
   const [meetings, sessions, { rows: configs }] = await Promise.all([
@@ -76,19 +99,25 @@ async function getCalendar(season = SEASON) {
       const cfg = configMap[round] || {};
       const own = sessions.filter(s => s.meeting_key === m.meeting_key);
       const race = sessionNamed(own, 'Race');
-      const lockTime = cfg.lock_time ? new Date(cfg.lock_time) : new Date(m.date_start);
+      const qualifying = sessionNamed(own, 'Qualifying');
+      const sprint = sessionNamed(own, 'Sprint');
+      const raceStart = race?.date_start ? new Date(race.date_start) : null;
+      const { lockTime, lockSource } = resolveLock(cfg, {
+        weekend: new Date(m.date_start),
+        sprint: sprint?.date_start ? new Date(sprint.date_start) : null,
+        qualifying: qualifying?.date_start ? new Date(qualifying.date_start) : null,
+        race: raceStart,
+      });
       return {
         round,
         meeting: m,
         cfg,
-        sessions: {
-          race,
-          qualifying: sessionNamed(own, 'Qualifying'),
-          sprint: sessionNamed(own, 'Sprint'),
-        },
+        sessions: { race, qualifying, sprint },
         weekendStart: new Date(m.date_start),
+        raceStart,
         raceEnd: new Date(race?.date_end || m.date_end || m.date_start),
         lockTime,
+        lockSource,
         isLocked: cfg.manually_locked === 1 || now >= lockTime,
         isSprint: own.some(s => s.session_name === 'Sprint') || cfg.is_sprint === 1,
         isCancelled: cfg.cancelled === 1 || !!m.is_cancelled,
@@ -118,4 +147,4 @@ async function isRaceLocked(round, season = SEASON) {
   }
 }
 
-module.exports = { getCalendar, getRace, isRaceLocked };
+module.exports = { getCalendar, getRace, isRaceLocked, resolveLock, LOCK_POINTS };

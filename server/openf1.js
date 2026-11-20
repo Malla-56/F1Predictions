@@ -1,13 +1,40 @@
 const fetch = require('node-fetch');
+const pool = require('./db');
 
 const BASE = 'https://api.openf1.org/v1';
 const CACHE = new Map();
 const INFLIGHT = new Map();
 const TTL_STATIC = 24 * 60 * 60 * 1000; // 24 hours — calendar, sessions, drivers
+// After falling back to a stale copy, wait this long before asking OpenF1 again, so an
+// outage (e.g. OpenF1's lockout during live sessions) doesn't add a failed call to every request.
+const RETRY_AFTER_FAILURE = 5 * 60 * 1000;
+
+// Every successful lookup is also saved to Supabase, because the in-memory cache starts
+// empty on each new serverless instance. Failures here never break the request.
+async function persist(key, data) {
+  try {
+    await pool.query(`
+      INSERT INTO openf1_cache (key, data, fetched_at) VALUES ($1, $2, NOW())
+      ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, fetched_at = NOW()
+    `, [key, JSON.stringify(data)]);
+  } catch (err) {
+    console.warn(`OpenF1 cache save failed for ${key}: ${err.message}`);
+  }
+}
+
+async function loadPersisted(key) {
+  try {
+    const { rows: [row] } = await pool.query('SELECT data, fetched_at FROM openf1_cache WHERE key = $1', [key]);
+    return row || null;
+  } catch (err) {
+    console.warn(`OpenF1 cache load failed for ${key}: ${err.message}`);
+    return null;
+  }
+}
 
 async function cached(key, fetcher, ttl = TTL_STATIC) {
   const hit = CACHE.get(key);
-  if (hit && Date.now() - hit.ts < ttl) return hit.data;
+  if (hit && Date.now() < hit.expires) return hit.data;
 
   // Deduplicate concurrent requests for the same key
   if (INFLIGHT.has(key)) return INFLIGHT.get(key);
@@ -15,13 +42,19 @@ async function cached(key, fetcher, ttl = TTL_STATIC) {
   const promise = (async () => {
     try {
       const data = await fetcher();
-      CACHE.set(key, { data, ts: Date.now() });
+      CACHE.set(key, { data, expires: Date.now() + ttl });
+      // Don't let an empty answer replace a good saved copy.
+      if (!Array.isArray(data) || data.length) await persist(key, data);
       return data;
     } catch (err) {
-      // On rate-limit or transient error, serve stale data if available
-      if (hit) {
-        console.warn(`OpenF1 fetch failed (${err.message}), serving stale cache for ${key}`);
-        return hit.data;
+      // OpenF1 unavailable (lockout, rate limit, outage): serve the last good copy,
+      // from memory if this instance has one, otherwise from Supabase.
+      const stale = hit ? { data: hit.data } : await loadPersisted(key);
+      if (stale) {
+        console.warn(`OpenF1 fetch failed (${err.message}), serving saved copy for ${key}` +
+          (stale.fetched_at ? ` from ${new Date(stale.fetched_at).toISOString()}` : ''));
+        CACHE.set(key, { data: stale.data, expires: Date.now() + RETRY_AFTER_FAILURE });
+        return stale.data;
       }
       throw err;
     } finally {
@@ -45,7 +78,9 @@ async function get(path, tries = 3) {
       await new Promise(r => setTimeout(r, waitMs));
       continue;
     }
-    throw new Error(`OpenF1 ${path} → ${res.status}`);
+    const err = new Error(`OpenF1 ${path} → ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
 }
 
@@ -93,8 +128,10 @@ async function getStandings(kind, year) {
       try {
         const rows = await get(`/championship_${kind}?session_key=${s.session_key}`);
         if (rows.length) return rows;
-      } catch {
-        // Not published yet for this race — try the one before.
+      } catch (err) {
+        // 404: not published yet for this race, so try the one before. Anything else means
+        // OpenF1 is unavailable; rethrow so the saved standings are used instead of [].
+        if (err.status !== 404) throw err;
       }
     }
     return [];
@@ -109,6 +146,42 @@ const getDriverStandings = year => getStandings('drivers', year);
 async function getSessionResult(sessionKey) {
   if (!sessionKey) return [];
   return get(`/session_result?session_key=${sessionKey}`);
+}
+
+// Health check for the admin pages: one live request to OpenF1 (no retries) plus when
+// the saved Supabase copy was last refreshed. Cached briefly so opening admin pages
+// doesn't eat into OpenF1's rate limit.
+const STATUS_TTL = 60 * 1000;
+let lastStatus = null;
+
+async function status(year) {
+  if (lastStatus && Date.now() - lastStatus.ts < STATUS_TTL) return lastStatus.data;
+
+  const data = { ok: false, httpStatus: null, detail: null, lockout: false, checkedAt: new Date().toISOString() };
+  try {
+    const res = await fetch(`${BASE}/meetings?year=${year}&meeting_key=latest`, { timeout: 8000 });
+    data.httpStatus = res.status;
+    data.ok = res.ok;
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      data.detail = typeof body?.detail === 'string' ? body.detail : null;
+      data.lockout = res.status === 401 && /live f1 session/i.test(data.detail || '');
+    }
+  } catch (err) {
+    data.detail = err.message;
+  }
+
+  try {
+    const { rows: [row] } = await pool.query('SELECT MAX(fetched_at) AS saved_at, COUNT(*)::int AS saved_count FROM openf1_cache');
+    data.savedAt = row.saved_at;
+    data.savedCount = row.saved_count;
+  } catch {
+    data.savedAt = null;
+    data.savedCount = 0;
+  }
+
+  lastStatus = { data, ts: Date.now() };
+  return data;
 }
 
 function invalidate(key) {
@@ -159,5 +232,5 @@ async function buildResult(race) {
 
 module.exports = {
   getMeetings, getSeasonSessions, getLatestSessionKey, getDrivers,
-  getTeamStandings, getDriverStandings, getSessionResult, buildResult, invalidate,
+  getTeamStandings, getDriverStandings, getSessionResult, buildResult, invalidate, status,
 };

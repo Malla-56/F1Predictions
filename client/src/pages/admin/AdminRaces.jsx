@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../api';
 import { useAppData } from '../../context/AppDataContext';
 import Topbar from '../../components/Topbar';
+import OpenF1Status from '../../components/OpenF1Status';
 
 // <input type="datetime-local"> works in the browser's local time with no zone, so
 // convert to/from UTC ISO here rather than letting the server guess.
@@ -11,6 +12,22 @@ function toLocalInput(iso) {
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+
+const LOCK_LABELS = {
+  weekend: 'Weekend start',
+  sprint: 'Sprint',
+  qualifying: 'Qualifying',
+  race: 'Race start',
+};
+
+const SOURCE_NOTES = {
+  weekend: 'weekend start',
+  sprint: 'sprint start',
+  qualifying: 'qualifying start',
+  race: 'race start',
+  custom: 'custom time',
+  capped: 'custom time, capped at race start',
+};
 
 function fmtLocal(iso) {
   return new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -36,6 +53,8 @@ export default function AdminRaces({ setToast }) {
       await api.admin.saveRace(race.round, patch);
       setConfigs(prev => ({ ...prev, [race.round]: { ...prev[race.round], ...patch } }));
       setToast(message);
+      // Effective lock time and locked state are computed server-side.
+      await reloadRaces();
     } catch (err) {
       setToast(`Error: ${err.message}`);
     } finally {
@@ -43,12 +62,50 @@ export default function AdminRaces({ setToast }) {
     }
   }
 
+  // Lock at a session (follows OpenF1 schedule changes). Clears any custom time.
+  function setLockPoint(race, point) {
+    save(race, { lock_at: point, lock_time: null },
+      `R${race.round} now locks at ${LOCK_LABELS[point].toLowerCase()}`);
+  }
+
+  // Custom lock time. The input always shows the effective lock time, so leaving it
+  // unchanged is a no-op; clearing it goes back to the default.
   function setLockTime(race, value) {
-    const lockTime = value ? new Date(value).toISOString() : null;
-    const current = configs[race.round]?.lock_time ?? null;
-    if ((current && new Date(current).toISOString()) === lockTime) return;
-    save(race, { lock_time: lockTime },
-      lockTime ? `Lock time updated for R${race.round}` : `R${race.round} lock time reset to default`);
+    if (value === toLocalInput(race.lockTime)) return;
+    if (!value) return setLockPoint(race, 'weekend');
+    save(race, { lock_time: new Date(value).toISOString(), lock_at: null }, `Lock time updated for R${race.round}`);
+  }
+
+  // Ticked whenever tips are actually locked (manual lock or lock time passed).
+  // Unticking reopens tips until race start; once the race has started it stays locked.
+  function toggleLocked(race) {
+    if (!race.isLocked) {
+      return save(race, { manually_locked: 1 }, `R${race.round} locked`);
+    }
+    const patch = { manually_locked: 0 };
+    const timePassed = new Date() >= new Date(race.lockTime);
+    if (timePassed && race.raceStart) Object.assign(patch, { lock_at: 'race', lock_time: null });
+    save(race, patch, timePassed
+      ? `R${race.round} unlocked — tips open until race start`
+      : `R${race.round} unlocked`);
+  }
+
+  function lockStatus(r, cfg) {
+    const raceStarted = r.raceStart && new Date() >= new Date(r.raceStart);
+    if (raceStarted) return 'Race started';
+    if (cfg.manually_locked === 1) return 'Locked manually';
+    if (r.isLocked) return `Auto-locked ${fmtLocal(r.lockTime)}`;
+    return `Open · locks ${fmtLocal(r.lockTime)}`;
+  }
+
+  // Lock points available for a race, with their session times.
+  function lockOptions(r) {
+    return [
+      ['weekend', r.date],
+      ['sprint', r.sprintStart],
+      ['qualifying', r.qualifyingStart],
+      ['race', r.raceStart],
+    ].filter(([, time]) => time);
   }
 
   // Only one joker round per season — the server clears the previous one, so mirror that here.
@@ -85,11 +142,12 @@ export default function AdminRaces({ setToast }) {
           <div>
             <h2 className="page-title">Race Management</h2>
             <div className="page-sub">
-              Override lock times and manage sprint weekends · times are in your local time zone
+              Choose when tips lock and manage sprint weekends · tips always lock by race start · times are in your local time zone
             </div>
           </div>
         </div>
 
+        <OpenF1Status />
         {loadError && <div className="results-empty">Couldn't load race settings: {loadError}</div>}
         {!loaded && <div className="loading">Loading race settings…</div>}
 
@@ -100,17 +158,17 @@ export default function AdminRaces({ setToast }) {
                 <th>Round</th>
                 <th>Race</th>
                 <th>Date</th>
-                <th>Lock Time Override</th>
+                <th>Lock Time</th>
                 <th>Sprint</th>
                 <th>Cancelled</th>
                 <th title="Every score for this round counts double. One round per season.">Joker ×2</th>
-                <th>Manual Lock</th>
+                <th title="Ticked whenever tips are locked, manually or because the lock time has passed">Locked</th>
               </tr>
             </thead>
             <tbody>
               {races.map(r => {
                 const cfg = configs[r.round] || {};
-                const isManuallyLocked = cfg.manually_locked === 1;
+                const raceStarted = !!r.raceStart && new Date() >= new Date(r.raceStart);
                 const busy = saving === r.round || !loaded;
                 return (
                   <tr key={r.round} style={r.isCancelled ? { opacity: 0.5 } : {}}>
@@ -123,13 +181,29 @@ export default function AdminRaces({ setToast }) {
                       {new Date(r.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                     </td>
                     <td>
+                      <select
+                        aria-label={`Lock point for round ${r.round}`}
+                        value={r.lockSource === 'capped' ? 'custom' : r.lockSource}
+                        disabled={busy}
+                        onChange={e => setLockPoint(r, e.target.value)}
+                        style={{
+                          background: 'var(--bg)', border: '1px solid var(--line)',
+                          borderRadius: 3, color: 'var(--text)', fontFamily: 'var(--mono)',
+                          fontSize: 11, padding: '4px 8px', width: '100%', marginBottom: 6,
+                        }}
+                      >
+                        {lockOptions(r).map(([point, time]) => (
+                          <option key={point} value={point}>{LOCK_LABELS[point]} · {fmtLocal(time)}</option>
+                        ))}
+                        {['custom', 'capped'].includes(r.lockSource) && <option value="custom" disabled>Custom time</option>}
+                      </select>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <input
                           // Remount when the stored value changes so the uncontrolled input shows it.
-                          key={`${r.round}-${cfg.lock_time ?? ''}`}
+                          key={`${r.round}-${r.lockTime}`}
                           type="datetime-local"
-                          aria-label={`Lock time override for round ${r.round}`}
-                          defaultValue={toLocalInput(cfg.lock_time)}
+                          aria-label={`Lock time for round ${r.round}`}
+                          defaultValue={toLocalInput(r.lockTime)}
                           disabled={busy}
                           onBlur={e => setLockTime(r, e.target.value)}
                           style={{
@@ -138,15 +212,15 @@ export default function AdminRaces({ setToast }) {
                             fontSize: 11, padding: '4px 8px', width: '100%',
                           }}
                         />
-                        {cfg.lock_time && (
+                        {r.lockSource !== 'weekend' && (
                           <button className="btn ghost" style={{ height: 26, padding: '0 8px', fontSize: 11 }}
-                            disabled={busy} onClick={() => setLockTime(r, '')} title="Reset to default lock time">
+                            disabled={busy} onClick={() => setLockPoint(r, 'weekend')} title="Back to the default: lock at weekend start">
                             Reset
                           </button>
                         )}
                       </div>
                       <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>
-                        Locks {fmtLocal(r.lockTime)}{cfg.lock_time ? '' : ' (weekend start)'}
+                        Locks {fmtLocal(r.lockTime)} ({SOURCE_NOTES[r.lockSource] || 'weekend start'})
                       </div>
                     </td>
                     <td>
@@ -175,14 +249,12 @@ export default function AdminRaces({ setToast }) {
                       </label>
                     </td>
                     <td>
-                      <button
-                        className={`btn${isManuallyLocked ? ' danger' : ''}`}
-                        style={{ height: 30, padding: '0 10px', fontSize: 12 }}
-                        disabled={busy}
-                        onClick={() => toggle(r, 'manually_locked', 'locked', 'unlocked')}
-                      >
-                        {isManuallyLocked ? 'Unlock' : 'Lock'}
-                      </button>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: raceStarted ? 'default' : 'pointer' }}
+                        title={raceStarted ? 'Tips always stay locked once the race has started' : undefined}>
+                        <input type="checkbox" checked={r.isLocked} disabled={busy || raceStarted}
+                          onChange={() => toggleLocked(r)} style={{ accentColor: 'var(--red)' }} />
+                        <span className="mono" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{lockStatus(r, cfg)}</span>
+                      </label>
                     </td>
                   </tr>
                 );

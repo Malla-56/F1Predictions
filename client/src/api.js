@@ -86,6 +86,7 @@ export const api = {
     scoring:     ()               => request('GET',  '/admin/scoring'),
     saveScoring: (rules)          => request('PUT',  '/admin/scoring', rules),
     races:       ()               => request('GET',  '/admin/races'),
+    openf1Status: ()              => request('GET',  '/admin/openf1-status'),
     saveRace:    (round, data)    => request('PUT',  `/admin/races/${round}`, data),
     results:     ()               => request('GET',  '/admin/results'),
     saveResult:  (round, data)    => request('PUT',  `/admin/results/${round}`, data),

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../api';
 import { useAppData } from '../../context/AppDataContext';
 import Topbar from '../../components/Topbar';
+import OpenF1Status from '../../components/OpenF1Status';
 import DriverDropdown from '../../components/DriverDropdown';
 
 export default function AdminResults({ setToast }) {
@@ -130,6 +131,7 @@ export default function AdminResults({ setToast }) {
     <>
       <Topbar crumbs={['Admin', 'Results']} />
       <div className="content">
+        <OpenF1Status />
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
             <h2 className="page-title">Race Results</h2>

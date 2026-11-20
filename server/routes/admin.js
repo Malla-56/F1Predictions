@@ -5,7 +5,7 @@ const openf1 = require('../openf1');
 const requireAuth = require('../middleware/auth');
 const requireAdmin = require('../middleware/requireAdmin');
 const parseRound = require('../middleware/round');
-const { getRace } = require('../calendar');
+const { getRace, LOCK_POINTS } = require('../calendar');
 const { scoreRound, rescoreAll } = require('../scorer');
 const { SEASON } = require('../config');
 
@@ -100,6 +100,12 @@ router.put('/scoring', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── OpenF1 status ──────────────────────────────────────────────────────────
+
+router.get('/openf1-status', async (req, res) => {
+  res.json(await openf1.status(SEASON));
+});
+
 // ── Race Config ────────────────────────────────────────────────────────────
 
 router.get('/races', async (req, res) => {
@@ -110,7 +116,8 @@ router.get('/races', async (req, res) => {
 const RACE_FLAGS = ['manually_locked', 'is_sprint', 'cancelled', 'is_joker'];
 
 // Partial update: only the fields present in the body change. lock_time: null clears
-// the override (back to the default lock at the start of the race weekend).
+// the override (back to the default lock at the start of the race weekend). An override
+// later than the race start is capped to it in calendar.getCalendar.
 router.put('/races/:round', async (req, res) => {
   const body = req.body || {};
   const fields = {};
@@ -122,6 +129,14 @@ router.put('/races/:round', async (req, res) => {
       return res.status(400).json({ error: 'Invalid lock time' });
     }
     fields.lock_time = body.lock_time === null ? null : new Date(body.lock_time).toISOString();
+  }
+  // Session tips lock at; null or 'weekend' means the default (weekend start).
+  if ('lock_at' in body) {
+    const lockAt = body.lock_at === 'weekend' ? null : body.lock_at;
+    if (lockAt !== null && !LOCK_POINTS.includes(lockAt)) {
+      return res.status(400).json({ error: 'Invalid lock point' });
+    }
+    fields.lock_at = lockAt;
   }
   if ('notes' in body) fields.notes = body.notes ?? null;
 

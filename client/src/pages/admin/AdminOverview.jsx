@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
 import Topbar from '../../components/Topbar';
+import OpenF1Status from '../../components/OpenF1Status';
 
 export default function AdminOverview() {
   const [stats, setStats] = useState(null);
@@ -13,6 +14,7 @@ export default function AdminOverview() {
     <>
       <Topbar crumbs={['Admin', 'Overview']} />
       <div className="content">
+        <OpenF1Status />
         <div className="sec-head" style={{ marginTop: 0 }}>
           <div>
             <h2 className="page-title">Admin Overview</h2>
