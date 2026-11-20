@@ -142,8 +142,8 @@ export default function Home({ setToast, theme, setTheme }) {
 
         {selectedTip && (
           <Modal onClose={() => setSelectedTip(null)} labelledBy="home-tip-title" style={{ maxWidth: 520, padding: '28px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                   <Avatar displayName={selectedTip.displayName} size={40} isMe={selectedTip.userId === user?.id} />
                   <div>
                     <div id="home-tip-title" style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 15 }}>{selectedTip.displayName}</div>
@@ -152,11 +152,11 @@ export default function Home({ setToast, theme, setTheme }) {
                 </div>
                 <span className="badge locked dot">Submitted</span>
               </div>
-              <div style={{ marginBottom: 28 }}>
-                <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 16 }}>RACE FINISH</div>
-                <div className="reveal-grid" style={{ gap: 12 }}>
+              <div style={{ marginBottom: 20 }}>
+                <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 6 }}>RACE FINISH</div>
+                <div className="reveal-grid">
                   {(selectedTip.positions || []).map((id, i) => (
-                    <div key={i} className="reveal-row" style={{ padding: '12px 0', borderBottom: i < 9 ? '1px solid var(--line)' : 'none', gap: 20 }}>
+                    <div key={i} className="reveal-row">
                       <span className="pos">P{i + 1}</span>
                       <DriverChip driverId={id} />
                     </div>
@@ -174,7 +174,7 @@ export default function Home({ setToast, theme, setTheme }) {
                 </div>
               </div>
               {selectedTip.userId === user?.id && !upcoming?.isLocked && (
-                <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
+                <div style={{ marginTop: 24 }}>
                   <button className="btn primary" style={{ width: '100%' }} onClick={() => { setSelectedTip(null); navigate(`/predict/${upcoming.round}`); }}>
                     Edit tips →
                   </button>

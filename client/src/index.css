@@ -319,6 +319,18 @@ a { color: inherit; text-decoration: none; }
 .driver-chip .abbr { letter-spacing: 0.04em; }
 .driver-chip .lname { font-weight: 500; color: var(--text-2); }
 
+/* Full-tip popup: fixed-width position column so P1–P10 line up, and a fixed-width
+   car number so the driver codes line up too. */
+.reveal-grid { display: flex; flex-direction: column; }
+.reveal-row {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center;
+  min-height: 44px; border-bottom: 1px solid var(--line);
+}
+.reveal-row:last-child { border-bottom: 0; }
+.reveal-row .pos { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--text-3); }
+.reveal-row:first-child .pos { color: var(--red); }
+.reveal-row .driver-chip .num { min-width: 30px; }
+
 /* Hero */
 .hero {
   position: relative;
